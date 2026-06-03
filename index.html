@@ -1,0 +1,1624 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Truck &amp; 53ft Trailer Backing Simulator</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #222;
+        overflow: hidden;
+        touch-action: none;
+        font-family: sans-serif;
+        color: #eee;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+      }
+
+      canvas {
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+        touch-action: none;
+      }
+
+      #controls {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background: #111;
+        padding: 1vw;
+        display: grid;
+        grid-template-columns: 1fr 0.7fr 0.7fr 1.3fr;
+        gap: 1vw;
+        z-index: 10;
+        box-sizing: border-box;
+        align-items: center;
+      }
+
+      #fwdrev-group {
+        display: flex;
+        flex-direction: column;
+        gap: 1vw;
+      }
+
+      #fwdrev-group .btn {
+        width: 100%;
+      }
+
+      #steer-center-group {
+        display: flex;
+        flex-direction: column;
+        gap: 1vw;
+      }
+
+      #steer-group {
+        display: flex;
+        gap: 1vw;
+      }
+
+      #steer-group .btn {
+        flex: 1;
+        padding: 3vw 1vw;
+        font-size: clamp(12px, 3.5vw, 20px);
+      }
+
+      #steer-center-group > .btn {
+        width: 100%;
+      }
+
+      .btn {
+        padding: 2vw 1vw;
+        background: #333;
+        border-radius: 8px;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        font-size: clamp(11px, 3vw, 18px);
+        text-align: center;
+        touch-action: none;
+        cursor: pointer;
+        white-space: nowrap;
+        overflow: hidden;
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      .btn:active {
+        background: #555;
+      }
+
+      #hud {
+        position: fixed;
+        top: 6px;
+        right: 8px;
+        font-size: 13px;
+        text-align: right;
+        pointer-events: none;
+      }
+
+      #keyLegend {
+        margin-top: 4px;
+        font-size: 11px;
+        color: #666;
+      }
+
+      @media (max-width: 768px) {
+        #keyLegend { display: none; }
+      }
+
+      @media (min-width: 769px) {
+        #controls {
+          padding: 6px 10px;
+          gap: 6px;
+          grid-template-columns: 120px 90px 90px 200px;
+        }
+        .btn {
+          padding: 8px 10px;
+          font-size: 13px;
+          border-radius: 6px;
+          width: 100%;
+        }
+        #steer-group .btn {
+          padding: 10px 10px;
+          font-size: 14px;
+        }
+        #fwdrev-group { gap: 6px; }
+        #steer-center-group { gap: 6px; }
+        #steer-group { gap: 6px; }
+      }
+
+      @media (orientation: landscape) and (max-height: 500px) {
+        #controls {
+          padding: 0.4vh 1vw;
+          gap: 0.5vw;
+        }
+        .btn {
+          padding: 0.8vh 1vw;
+          font-size: clamp(9px, 2vw, 13px);
+          border-radius: 5px;
+        }
+        #steer-group .btn {
+          padding: 1.2vh 1vw;
+          font-size: clamp(9px, 2.5vw, 14px);
+        }
+        #fwdrev-group {
+          gap: 0.5vw;
+        }
+        #steer-center-group {
+          gap: 0.5vw;
+        }
+      }
+
+      .mirror-wrap {
+        position: fixed;
+        top: 33%;
+        transform: translateY(-50%);
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+      #mirror-left  { left: 6px; }
+      #mirror-right { right: 6px; }
+
+      .mirror-wrap canvas {
+        border: 2px solid #555;
+        border-radius: 6px;
+        background: #000;
+        display: block;
+      }
+      .mirror-wrap .mirror-label {
+        font-size: 10px;
+        color: #888;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="sim"></canvas>
+
+    <div id="controls">
+      <div id="fwdrev-group">
+        <div class="btn" data-a="fwd">▲ Fwd</div>
+        <div class="btn" data-a="rev">▼ Rev</div>
+      </div>
+      <div class="btn" data-a="tandem">Tandems</div>
+      <div class="btn" data-a="reset">Reset</div>
+      <div id="steer-center-group">
+        <div id="steer-group">
+          <div class="btn" data-a="left"><span style="display:inline-block;transform:rotate(-90deg)">▲</span> Left</div>
+          <div class="btn" data-a="right"><span style="display:inline-block;transform:rotate(90deg)">▲</span> Right</div>
+        </div>
+        <div class="btn" data-a="center">Center</div>
+      </div>
+      <div class="btn btn-wide" data-a="brake">Brake</div>
+    </div>
+
+    <div class="mirror-wrap" id="mirror-left">
+      <canvas id="mirrorCanvasL" width="90" height="60"></canvas>
+      <span class="mirror-label">Left</span>
+    </div>
+    <div class="mirror-wrap" id="mirror-right">
+      <canvas id="mirrorCanvasR" width="90" height="60"></canvas>
+      <span class="mirror-label">Right</span>
+    </div>
+
+    <div id="hud">
+      <div id="statusLine"></div>
+      <div id="scoreLine"></div>
+      <div id="keyLegend">W/S: Fwd/Rev &nbsp; A/D: Steer &nbsp; Q: Brake &nbsp; E: Center &nbsp; R: Reset &nbsp; F: Tandems</div>
+    </div>
+
+    <script>
+      /* =====================================
+         CANVAS & DOM REFERENCES
+      ===================================== */
+      const canvas = document.getElementById("sim");
+      const ctx = canvas.getContext("2d");
+      const statusLine = document.getElementById("statusLine");
+      const scoreLine = document.getElementById("scoreLine");
+      const controlsEl = document.getElementById("controls");
+
+      /* =====================================
+         CONSTANTS
+      ===================================== */
+      const DOOR_WIDTH     = 70;
+      const DOOR_SPACING   = 100;
+      const CHASE_DISTANCE = 250;
+      const ZOOM_DEFAULT   = 0.55;
+      const ZOOM_MIN       = 0.15;
+      const ZOOM_MAX       = 1.5;
+
+      const truck = {
+        length: 100,
+        width: 50,
+        wheelbase: 70,
+        hitchToRear: 35,
+      };
+
+      const trailer = {
+        length: 318,          // 53ft scaled
+        width: 50,
+        kingpinToFront: 18,
+      };
+
+      const FULL_LENGTH = truck.length + trailer.length;
+
+      // All dock buildings. x/width/y are computed in resize().
+      // axis: "top" = doors face down (south), "right" = doors face left (west)
+      const BUILDING_DEPTH  = 180;   // warehouse wall thickness
+      const DOCK_FACE_DEPTH = 60;    // dock door recess depth
+
+      const buildings = [
+        { id: "A", doors: 10, x: 0, width: 0, y: 40,  label: "Warehouse A", axis: "top"   },
+        { id: "B", doors: 4,  x: 0, width: 0, y: 0,   label: "Warehouse B", axis: "right"  },
+      ];
+
+      // dock is an alias for buildings[0] for legacy physics code
+      const dock = buildings[0];
+
+      const limits = {
+        maxSteer: Math.PI / 4,
+        accel: 0.6,
+        friction: 0.08,
+        maxSpeed: 65,
+      };
+
+      // Tandem slide positions (kingpin → rear axle distance)
+      const TANDEM_BACK    = trailer.length - trailer.kingpinToFront; // Highway (default)
+      const TANDEM_FORWARD = TANDEM_BACK - 60;                        // City (tighter turns)
+
+      /* =====================================
+         STATE
+      ===================================== */
+      const state = {
+        x: 0,
+        y: 0,
+        heading: -Math.PI / 2,
+        trailerX: 0,
+        trailerY: 0,
+        trailerAngle: -Math.PI / 2,
+        rearAxleX: 0,
+        rearAxleY: 0,
+        speed: 0,
+        steerAngle: 0,
+        tandemMode: "highway",
+        axleOffset: 0,
+        collision: false,
+        jackknife: false,
+        lastDockDoor: null,
+        lastDockScore: null,
+        lastDockGrade: null,
+        score: 0,
+        docked: false,
+        framesSinceReset: 0,
+      };
+
+      const camera = { x: 0, y: 0, zoom: ZOOM_DEFAULT };
+
+      const keys = {
+        ArrowLeft: false,
+        ArrowRight: false,
+        ArrowUp: false,
+        ArrowDown: false,
+        Space: false,
+      };
+
+      const obstacles = [];
+
+      /* =====================================
+         OBSTACLE GENERATION
+      ===================================== */
+      function rectOverlapsAny(rx, ry, rw, rh, zones) {
+        for (const z of zones) {
+          if (rx < z.x + z.w && rx + rw > z.x &&
+              ry < z.y + z.h && ry + rh > z.y) return true;
+        }
+        return false;
+      }
+
+      function rotatedAABB(x, y, w, h, angle) {
+        const cx = x + w / 2, cy = y + h / 2;
+        const hw = w / 2, hh = h / 2;
+        const cos = Math.abs(Math.cos(angle)), sin = Math.abs(Math.sin(angle));
+        const bw = hw * cos + hh * sin, bh = hw * sin + hh * cos;
+        return { x: cx - bw, y: cy - bh, w: bw * 2, h: bh * 2 };
+      }
+
+      // placedBoxes is shared between tryPlace calls within one generateObstacles run
+      let _placedBoxes = [];
+      let _exclusions  = [];
+
+      function tryPlace(obs) {
+        const angle  = obs.angle || 0;
+        const aabb   = rotatedAABB(obs.x, obs.y, obs.w, obs.h, angle);
+        const pad    = 15;
+        const padded = { x: aabb.x - pad, y: aabb.y - pad, w: aabb.w + pad * 2, h: aabb.h + pad * 2 };
+        if (rectOverlapsAny(padded.x, padded.y, padded.w, padded.h, _exclusions))  return false;
+        if (rectOverlapsAny(padded.x, padded.y, padded.w, padded.h, _placedBoxes)) return false;
+        _placedBoxes.push(aabb);
+        obstacles.push(obs);
+        return true;
+      }
+
+      function generateObstacles() {
+        obstacles.length = 0;
+        _placedBoxes = [];
+        _exclusions  = [];
+
+        const yardDepth = 2500;
+        const leftEdge  = dock.x - 800;
+        const rightEdge = dock.x + dock.width + 800;
+
+        // Boundary walls — start well below the building and apron area
+        // Building A: y=40, BUILDING_DEPTH=180 above, DOCK_FACE_DEPTH=60 + FULL_LENGTH apron below
+        // So bottom of apron = dock.y + DOCK_FACE_DEPTH + FULL_LENGTH + 80
+        const wallStartY = dock.y + DOCK_FACE_DEPTH + FULL_LENGTH + 200;
+        const wallLeft  = leftEdge  - 200;
+        const wallRight = rightEdge + 200;
+        obstacles.push(
+          { type: "wall", x: wallLeft,  y: wallStartY, w: 30, h: yardDepth },
+          { type: "wall", x: wallRight, y: wallStartY, w: 30, h: yardDepth }
+        );
+
+        // Build no-spawn exclusion zones for every building
+        const exclusions = [];
+        for (const bld of buildings) {
+          if (bld.axis === "top") {
+            // Building wall + dock face + concrete apron + player start buffer
+            exclusions.push(
+              // Wall block
+              { x: bld.x - 60, y: bld.y - BUILDING_DEPTH, w: bld.width + 120, h: BUILDING_DEPTH },
+              // Dock face + apron (concrete area in front of doors)
+              { x: bld.x - 60, y: bld.y, w: bld.width + 120, h: FULL_LENGTH + 80 },
+            );
+          } else {
+            // Building wall block
+            exclusions.push(
+              { x: bld.x + DOCK_FACE_DEPTH, y: bld.y - 60, w: BUILDING_DEPTH, h: bld.width + 120 },
+              // Dock face + apron (concrete area to the left of doors)
+              { x: bld.x - FULL_LENGTH - 80, y: bld.y - 60, w: FULL_LENGTH + 80, h: bld.width + 120 },
+            );
+          }
+        }
+
+        // Player start buffer zone
+        exclusions.push({
+          x: dock.x - 300,
+          y: dock.y + dock.depth + 100,
+          w: 600,
+          h: 400,
+        });
+
+        // Make exclusions available to tryPlace
+        _exclusions = exclusions;
+
+        // --- Parked trailers at dock doors (max 2 per building, inline with guidelines) ---
+        for (const bld of buildings) {
+          // Pick up to 2 random door indices to park at
+          const doorIndices = Array.from({ length: bld.doors }, (_, i) => i)
+            .sort(() => Math.random() - 0.5)
+            .slice(0, 2);
+
+          for (const i of doorIndices) {
+            if (bld.axis === "top") {
+              // Door centre X — trailer centred laterally on the door
+              const dc = bld.x + i * DOOR_SPACING + DOOR_SPACING / 2;
+              // Trailer extends outward (downward) from the dock face
+              // Rear of trailer at dock face, front extends into the yard
+              const tx = dc - trailer.width / 2;
+              const ty = bld.y + DOCK_FACE_DEPTH;
+              obstacles.push({ type: "trailer", x: tx, y: ty, w: trailer.width, h: trailer.length });
+            } else {
+              // Door centre Y — trailer centred laterally on the door
+              const dc = bld.y + i * DOOR_SPACING + DOOR_SPACING / 2;
+              // Trailer extends outward (leftward) from the dock face
+              const tx = bld.x - trailer.length;
+              const ty = dc - trailer.width / 2;
+              obstacles.push({ type: "trailer", x: tx, y: ty, w: trailer.length, h: trailer.width });
+            }
+          }
+        }
+
+        // --- Organized truck yard layout ---
+        const TW = trailer.width, TL = trailer.length;
+        const SPACING = TW + 14; // gap between parked trailers
+
+        // ── Row 1: trailers parked along the left boundary wall, nose-in ──
+        // Trailers face right (angle=0), rear against left wall
+        {
+          const rowX    = leftEdge + 30 + 10; // just inside the boundary wall
+          const rowYStart = dock.y + FULL_LENGTH + 300;
+          const slots   = 5 + Math.floor(Math.random() * 3); // 5–7 slots
+          for (let i = 0; i < slots; i++) {
+            const ty = rowYStart + i * SPACING;
+            // randomly leave some slots empty
+            if (Math.random() < 0.25) continue;
+            tryPlace({ type: "trailer", x: rowX, y: ty, w: TL, h: TW, angle: 0 });
+          }
+        }
+
+        // ── Row 2: trailers parked along the right boundary wall, nose-in ──
+        // Trailers face left (angle = PI), rear against right wall
+        {
+          const rowX    = rightEdge - 30 - TL - 10;
+          const rowYStart = dock.y + FULL_LENGTH + 300;
+          const slots   = 5 + Math.floor(Math.random() * 3);
+          for (let i = 0; i < slots; i++) {
+            const ty = rowYStart + i * SPACING;
+            if (Math.random() < 0.25) continue;
+            tryPlace({ type: "trailer", x: rowX, y: ty, w: TL, h: TW, angle: 0 });
+          }
+        }
+
+        // ── Row 3: middle row of trailers parked parallel (angle=0), spaced out ──
+        {
+          const midX     = (leftEdge + rightEdge) / 2 - TL / 2;
+          const rowYStart = dock.y + FULL_LENGTH + 600;
+          const slots    = 3 + Math.floor(Math.random() * 3);
+          for (let i = 0; i < slots; i++) {
+            const ty = rowYStart + i * SPACING;
+            if (Math.random() < 0.3) continue;
+            tryPlace({ type: "trailer", x: midX, y: ty, w: TL, h: TW, angle: 0 });
+          }
+        }
+
+        // ── Hazard cone clusters — 3 random spots in the yard ──
+        const coneAreas = [
+          { cx: leftEdge  + 200 + Math.random() * 200, cy: dock.y + FULL_LENGTH + 800 + Math.random() * 400 },
+          { cx: rightEdge - 200 - Math.random() * 200, cy: dock.y + FULL_LENGTH + 800 + Math.random() * 400 },
+          { cx: (leftEdge + rightEdge) / 2 + (Math.random() - 0.5) * 300, cy: dock.y + FULL_LENGTH + 1400 + Math.random() * 300 },
+        ];
+        for (const area of coneAreas) {
+          // 3–5 cones per cluster, scattered within ~60px radius
+          const clusterCount = 3 + Math.floor(Math.random() * 3);
+          for (let c = 0; c < clusterCount; c++) {
+            const cx = area.cx + (Math.random() - 0.5) * 120;
+            const cy = area.cy + (Math.random() - 0.5) * 80;
+            tryPlace({ type: "cone", x: cx - 10, y: cy - 10, w: 20, h: 20, angle: 0 });
+          }
+        }
+
+        // ── A few random loose trailers scattered at odd angles ──
+        const looseCount = 3 + Math.floor(Math.random() * 3);
+        let looseAttempts = 0, loosePlaced = 0;
+        while (loosePlaced < looseCount && looseAttempts < 300) {
+          looseAttempts++;
+          const x = leftEdge + 200 + Math.random() * (rightEdge - leftEdge - 400);
+          const y = dock.y + FULL_LENGTH + 900 + Math.random() * 800;
+          const angle = [0, Math.PI / 6, Math.PI / 4, Math.PI / 3, Math.PI / 2][Math.floor(Math.random() * 5)];
+          if (tryPlace({ type: "trailer", x, y, w: TL, h: TW, angle })) loosePlaced++;
+        }
+      }
+
+      /* =====================================
+         INPUT HANDLING
+      ===================================== */
+      function toggleTandem() {
+        if (state.tandemMode === "highway") {
+          state.tandemMode = "city";
+          state.axleOffset = TANDEM_FORWARD;
+        } else {
+          state.tandemMode = "highway";
+          state.axleOffset = TANDEM_BACK;
+        }
+      }
+
+      window.addEventListener("keydown", (e) => {
+        if (e.key in keys) keys[e.key] = true;
+        // WASD driving
+        if (e.key === "w" || e.key === "W") keys.ArrowUp    = true;
+        if (e.key === "s" || e.key === "S") keys.ArrowDown  = true;
+        if (e.key === "a" || e.key === "A") keys.ArrowLeft  = true;
+        if (e.key === "d" || e.key === "D") keys.ArrowRight = true;
+        // Extra controls
+        if (e.key === "q" || e.key === "Q") keys.Space      = true;  // Brake
+        if (e.key === "e" || e.key === "E") {                         // Center steering
+          keys.ArrowLeft = false;
+          keys.ArrowRight = false;
+          state.steerAngle = 0;
+        }
+        if (e.key === "r" || e.key === "R") reset();                  // Reset
+        if (e.key === "f" || e.key === "F") toggleTandem();           // Tandems
+        if (e.key === "t" || e.key === "T") toggleTandem();           // legacy
+      });
+
+      canvas.addEventListener("touchstart", (e) => { e.preventDefault(); }, { passive: false });
+
+      /* =====================================
+         ZOOM — mouse wheel + pinch
+      ===================================== */
+
+      canvas.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? 0.95 : 1.05;
+        camera.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, camera.zoom * delta));
+      }, { passive: false });
+
+      let lastPinchDist = null;
+
+      canvas.addEventListener("touchmove", (e) => {
+        if (e.touches.length === 2) {
+          e.preventDefault();
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (lastPinchDist !== null) {
+            const delta = dist / lastPinchDist;
+            camera.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, camera.zoom * delta));
+          }
+          lastPinchDist = dist;
+        }
+      }, { passive: false });
+
+      canvas.addEventListener("touchend", (e) => {
+        if (e.touches.length < 2) lastPinchDist = null;
+      });
+
+      window.addEventListener("keyup", (e) => {
+        if (e.key in keys) keys[e.key] = false;
+        // WASD release
+        if (e.key === "w" || e.key === "W") keys.ArrowUp    = false;
+        if (e.key === "s" || e.key === "S") keys.ArrowDown  = false;
+        if (e.key === "a" || e.key === "A") keys.ArrowLeft  = false;
+        if (e.key === "d" || e.key === "D") keys.ArrowRight = false;
+        if (e.key === "q" || e.key === "Q") keys.Space      = false;
+      });
+
+      document.querySelectorAll("#controls .btn").forEach((btn) => {
+        btn.addEventListener("touchstart", (e) => { e.preventDefault(); }, { passive: false });
+
+        btn.addEventListener("pointerdown", () => {
+          switch (btn.dataset.a) {
+            case "left":   keys.ArrowLeft  = true;  break;
+            case "right":  keys.ArrowRight = true;  break;
+            case "fwd":    keys.ArrowUp    = true;  break;
+            case "rev":    keys.ArrowDown  = true;  break;
+            case "brake":  keys.Space      = true;  break;
+            case "reset":  reset(); break;
+            case "tandem": toggleTandem(); break;
+            case "center":
+              keys.ArrowLeft  = false;
+              keys.ArrowRight = false;
+              state.steerAngle = 0;
+              break;
+          }
+        });
+
+        btn.addEventListener("pointerup", () => {
+          switch (btn.dataset.a) {
+            case "left":  keys.ArrowLeft  = false; break;
+            case "right": keys.ArrowRight = false; break;
+            case "fwd":   keys.ArrowUp    = false; break;
+            case "rev":   keys.ArrowDown  = false; break;
+            case "brake": keys.Space      = false; break;
+          }
+        });
+
+        ["pointercancel", "pointerleave"].forEach((evt) => {
+          btn.addEventListener(evt, () => {
+            keys.ArrowLeft = keys.ArrowRight = keys.ArrowUp = keys.ArrowDown = keys.Space = false;
+          });
+        });
+      });
+
+      /* =====================================
+         HELPERS
+      ===================================== */
+      function getRotatedBox(cx, cy, length, width, angle) {
+        const hw = width / 2;
+        const hl = length / 2;
+        const cosA = Math.cos(angle);
+        const sinA = Math.sin(angle);
+        return [
+          { x: -hl, y: -hw },
+          { x:  hl, y: -hw },
+          { x:  hl, y:  hw },
+          { x: -hl, y:  hw },
+        ].map((pt) => ({
+          x: cx + pt.x * cosA - pt.y * sinA,
+          y: cy + pt.x * sinA + pt.y * cosA,
+        }));
+      }
+
+      function polysIntersect(poly1, poly2) {
+        for (const polygon of [poly1, poly2]) {
+          for (let i = 0; i < polygon.length; i++) {
+            const p1 = polygon[i];
+            const p2 = polygon[(i + 1) % polygon.length];
+            const normal = { x: p2.y - p1.y, y: p1.x - p2.x };
+
+            let minA = Infinity, maxA = -Infinity;
+            for (const pt of poly1) {
+              const p = normal.x * pt.x + normal.y * pt.y;
+              if (p < minA) minA = p;
+              if (p > maxA) maxA = p;
+            }
+
+            let minB = Infinity, maxB = -Infinity;
+            for (const pt of poly2) {
+              const p = normal.x * pt.x + normal.y * pt.y;
+              if (p < minB) minB = p;
+              if (p > maxB) maxB = p;
+            }
+
+            if (maxA < minB || maxB < minA) return false;
+          }
+        }
+        return true;
+      }
+
+      /* =====================================
+         RESIZE
+      ===================================== */
+      function resize() {
+        canvas.width  = window.innerWidth;
+        canvas.height = window.innerHeight - (controlsEl.offsetHeight || 70);
+
+        // Building A — top axis, centred horizontally
+        buildings[0].width = buildings[0].doors * DOOR_SPACING;
+        buildings[0].x     = (canvas.width - buildings[0].width) / 2;
+        buildings[0].y     = 40;
+
+        // Building B — right axis (doors face left/west)
+        // Must be far enough right that its apron (extends left by FULL_LENGTH+80)
+        // doesn't overlap building A's right edge + apron margin (60px)
+        buildings[1].width = buildings[1].doors * DOOR_SPACING;
+        const minBx = buildings[0].x + buildings[0].width + 60 + FULL_LENGTH + 80 + 100;
+        buildings[1].x     = Math.max(minBx, buildings[0].x + buildings[0].width + 500);
+        buildings[1].y     = buildings[0].y + BUILDING_DEPTH + 300;
+      }
+      window.addEventListener("resize", resize);
+
+      /* =====================================
+         RESET
+      ===================================== */
+      function reset() {
+        resize();
+        generateObstacles();
+
+        // Sync axle offset with current tandem mode
+        state.axleOffset = state.tandemMode === "city" ? TANDEM_FORWARD : TANDEM_BACK;
+
+        // Tractor starting position — facing right, below dock apron
+        state.x       = dock.x - 200;
+        state.y       = dock.y + DOCK_FACE_DEPTH + 300;
+        state.heading = 0;
+
+        state.trailerAngle     = state.heading;
+        state.steerAngle       = 0;
+        state.speed            = 0;
+        state.jackknife        = false;
+        state.collision        = false;
+        state.lastDockDoor     = null;
+        state.lastDockScore    = null;
+        state.lastDockGrade    = null;
+        state.docked           = false;
+        state.framesSinceReset = 0;
+
+        // Initialise trailer geometry
+        const hx = state.x - truck.hitchToRear * Math.cos(state.heading);
+        const hy = state.y - truck.hitchToRear * Math.sin(state.heading);
+
+        // Trailer geometry
+        const trailerL        = state.axleOffset;
+        const kingpinToCenter = trailer.length / 2 - trailer.kingpinToFront;
+
+        state.rearAxleX = hx - trailerL * Math.cos(state.trailerAngle);
+        state.rearAxleY = hy - trailerL * Math.sin(state.trailerAngle);
+        state.trailerX  = state.rearAxleX + (trailerL - kingpinToCenter) * Math.cos(state.trailerAngle);
+        state.trailerY  = state.rearAxleY + (trailerL - kingpinToCenter) * Math.sin(state.trailerAngle);
+      }
+
+      /* =====================================
+         PHYSICS
+      ===================================== */
+      function applyBrake() {
+        state.speed *= 0.85;
+        if (Math.abs(state.speed) < 0.05) state.speed = 0;
+      }
+
+      function update(dt) {
+        state.framesSinceReset++;
+
+        if (state.jackknife || state.collision) {
+          state.speed = 0;
+          return;
+        }
+
+        // Normalise dt to 60fps so physics feel the same on all devices
+        const dtScale = dt * 60;
+
+        // Steering
+        if (keys.ArrowLeft)  state.steerAngle -= 0.03 * dtScale;
+        if (keys.ArrowRight) state.steerAngle += 0.03 * dtScale;
+        state.steerAngle = Math.max(-limits.maxSteer, Math.min(limits.maxSteer, state.steerAngle));
+
+        // Throttle / brake
+        if (keys.ArrowUp)   state.speed += limits.accel * dtScale;
+        if (keys.ArrowDown) state.speed -= limits.accel * dtScale;
+        if (keys.Space)     applyBrake();
+
+        // Coast friction
+        if (!keys.ArrowUp && !keys.ArrowDown) {
+          if (state.speed > 0)      state.speed = Math.max(0, state.speed - limits.friction * dtScale);
+          else if (state.speed < 0) state.speed = Math.min(0, state.speed + limits.friction * dtScale);
+        }
+
+        state.speed = Math.max(-limits.maxSpeed, Math.min(limits.maxSpeed, state.speed));
+        const v = state.speed;
+
+        if (Math.abs(v) < 0.001) {
+          return;
+        }
+
+        // Tractor kinematics
+        const omega = (v / truck.wheelbase) * Math.tan(state.steerAngle);
+        state.heading += omega * dt;
+
+        const ch = Math.cos(state.heading);
+        const sh = Math.sin(state.heading);
+        state.x += v * ch * dt;
+        state.y += v * sh * dt;
+
+        // Kingpin world position (fifth wheel)
+        const hx = state.x - truck.hitchToRear * ch;
+        const hy = state.y - truck.hitchToRear * sh;
+
+        // --- Trailer physics: geometric articulated model ---
+        // The kingpin moves with the truck. The rear axle can only roll along
+        // the trailer axis — no lateral slip. We derive the new trailer angle
+        // purely from the constraint that the axle→kingpin distance stays fixed.
+        const trailerL = state.axleOffset;
+
+        // New trailer angle = direction from rear axle to kingpin
+        const dx = hx - state.rearAxleX;
+        const dy = hy - state.rearAxleY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        // If kingpin somehow drifted too far, snap axle back onto the rod
+        if (dist > 0.001) {
+          state.trailerAngle = Math.atan2(dy, dx);
+        }
+
+        // Re-pin axle exactly trailerL behind kingpin along trailer axis
+        state.rearAxleX = hx - trailerL * Math.cos(state.trailerAngle);
+        state.rearAxleY = hy - trailerL * Math.sin(state.trailerAngle);
+
+        // Trailer centre
+        const kingpinToCenter = trailer.length / 2 - trailer.kingpinToFront;
+        state.trailerX = hx - kingpinToCenter * Math.cos(state.trailerAngle);
+        state.trailerY = hy - kingpinToCenter * Math.sin(state.trailerAngle);
+
+        // Jackknife detection
+        const diff = ((state.heading - state.trailerAngle + Math.PI) % (2 * Math.PI)) - Math.PI;
+        if (Math.abs(diff) > 1.9) state.jackknife = true;
+
+        checkCollisions();
+      }
+
+      /* =====================================
+         COLLISION DETECTION
+      ===================================== */
+      function checkCollisions() {
+        if (state.framesSinceReset < 20) return;
+
+        const truckCenterX = state.x + (truck.length / 2 - truck.hitchToRear) * Math.cos(state.heading);
+        const truckCenterY = state.y + (truck.length / 2 - truck.hitchToRear) * Math.sin(state.heading);
+
+        const truckPoly   = getRotatedBox(truckCenterX, truckCenterY, truck.length, truck.width, state.heading);
+        const trailerPoly = getRotatedBox(state.trailerX, state.trailerY, trailer.length, trailer.width, state.trailerAngle);
+
+        for (const bld of buildings) {
+          let wallPoly, dockPoly;
+
+          if (bld.axis === "top") {
+            wallPoly = [
+              { x: bld.x,             y: bld.y - BUILDING_DEPTH },
+              { x: bld.x + bld.width, y: bld.y - BUILDING_DEPTH },
+              { x: bld.x + bld.width, y: bld.y },
+              { x: bld.x,             y: bld.y },
+            ];
+            dockPoly = [
+              { x: bld.x,             y: bld.y },
+              { x: bld.x + bld.width, y: bld.y },
+              { x: bld.x + bld.width, y: bld.y + DOCK_FACE_DEPTH },
+              { x: bld.x,             y: bld.y + DOCK_FACE_DEPTH },
+            ];
+          } else {
+            // "right" axis — wall to the right of dock face
+            wallPoly = [
+              { x: bld.x + DOCK_FACE_DEPTH,                y: bld.y },
+              { x: bld.x + DOCK_FACE_DEPTH + BUILDING_DEPTH, y: bld.y },
+              { x: bld.x + DOCK_FACE_DEPTH + BUILDING_DEPTH, y: bld.y + bld.width },
+              { x: bld.x + DOCK_FACE_DEPTH,                y: bld.y + bld.width },
+            ];
+            dockPoly = [
+              { x: bld.x,                y: bld.y },
+              { x: bld.x + DOCK_FACE_DEPTH, y: bld.y },
+              { x: bld.x + DOCK_FACE_DEPTH, y: bld.y + bld.width },
+              { x: bld.x,                y: bld.y + bld.width },
+            ];
+          }
+
+          if (polysIntersect(truckPoly, wallPoly) || polysIntersect(trailerPoly, wallPoly)) {
+            state.collision = true;
+            return;
+          }
+
+          if (polysIntersect(truckPoly, dockPoly)) {
+            state.collision = true;
+            return;
+          }
+
+          if (polysIntersect(trailerPoly, dockPoly)) {
+            const angleDiff = Math.abs(
+              ((state.heading - state.trailerAngle + Math.PI) % (2 * Math.PI)) - Math.PI
+            );
+            if (angleDiff > 0.45) {
+              state.collision = true;
+              return;
+            }
+            checkDocking();
+            if (state.lastDockScore !== null) {
+              state.speed = 0;
+              if (!state.docked) {
+                state.score += state.lastDockScore;
+                state.docked = true;
+              }
+              return;
+            }
+          }
+        }
+
+        // Obstacle collisions
+        for (const o of obstacles) {
+          const angle = o.angle || 0;
+          const ob = getRotatedBox(o.x + o.w / 2, o.y + o.h / 2, o.w, o.h, angle);
+          if (polysIntersect(truckPoly, ob) || polysIntersect(trailerPoly, ob)) {
+            state.collision = true;
+            return;
+          }
+        }
+      }
+
+      /* =====================================
+         DOCKING
+      ===================================== */
+      function checkDocking() {
+        // Compute the rear-centre of the trailer in world space
+        const trailerRearX = state.trailerX - (trailer.length / 2) * Math.cos(state.trailerAngle);
+        const trailerRearY = state.trailerY - (trailer.length / 2) * Math.sin(state.trailerAngle);
+
+        const trailerPoly = getRotatedBox(state.trailerX, state.trailerY, trailer.length, trailer.width, state.trailerAngle);
+
+        // Angle between truck heading and trailer — used to penalise crooked docking
+        const absDiff = Math.abs(
+          ((state.heading - state.trailerAngle + Math.PI) % (2 * Math.PI)) - Math.PI
+        );
+
+        for (const bld of buildings) {
+          for (let i = 0; i < bld.doors; i++) {
+            let doorPoly, offset;
+
+            if (bld.axis === "top") {
+              // Doors face downward (south). Dock bumper is at bld.y.
+              const doorCenter = bld.x + i * DOOR_SPACING + DOOR_SPACING / 2;
+              const dl = doorCenter - DOOR_WIDTH / 2;
+              const dr = doorCenter + DOOR_WIDTH / 2;
+              doorPoly = [
+                { x: dl, y: bld.y },
+                { x: dr, y: bld.y },
+                { x: dr, y: bld.y + DOCK_FACE_DEPTH },
+                { x: dl, y: bld.y + DOCK_FACE_DEPTH },
+              ];
+              // Lateral offset: how far the trailer rear is from the door centre (X axis)
+              offset = Math.abs(doorCenter - trailerRearX);
+
+            } else {
+              // Doors face left (west). Dock bumper is at bld.x.
+              const doorCenter = bld.y + i * DOOR_SPACING + DOOR_SPACING / 2;
+              const dt = doorCenter - DOOR_WIDTH / 2;
+              const db = doorCenter + DOOR_WIDTH / 2;
+              doorPoly = [
+                { x: bld.x,                   y: dt },
+                { x: bld.x + DOCK_FACE_DEPTH, y: dt },
+                { x: bld.x + DOCK_FACE_DEPTH, y: db },
+                { x: bld.x,                   y: db },
+              ];
+              // Lateral offset: how far the trailer rear is from the door centre (Y axis)
+              offset = Math.abs(doorCenter - trailerRearY);
+            }
+
+            if (polysIntersect(trailerPoly, doorPoly)) {
+              // --- Lateral offset score (40 pts) ---
+              // Perfect = rear dead centre on door. Half door width (~35px) = 0 pts.
+              const maxOffset = DOOR_WIDTH / 2;
+              const offsetScore = Math.max(0, 40 * (1 - offset / maxOffset));
+
+              // --- Trailer angle vs dock axis (40 pts) ---
+              // trailerAngle should align with the dock approach direction:
+              //   top-axis docks: trailer should point straight up (angle ~= -PI/2 or PI/2)
+              //   right-axis docks: trailer should point straight left (angle ~= PI or 0)
+              let dockAxis;
+              if (bld.axis === "top") {
+                // Trailer approaches from below, so trailerAngle should be -PI/2
+                dockAxis = -Math.PI / 2;
+              } else {
+                // Trailer approaches from the right, so trailerAngle should be PI
+                dockAxis = Math.PI;
+              }
+              let angleDiff = Math.abs(state.trailerAngle - dockAxis);
+              // Normalise to [0, PI]
+              while (angleDiff > Math.PI) angleDiff = Math.abs(angleDiff - 2 * Math.PI);
+              // 0 rad = perfect (40pts), 0.15 rad (~9°) = 0 pts
+              const angleScore = Math.max(0, 40 * (1 - angleDiff / 0.15));
+
+              // --- Truck/trailer alignment score (20 pts) ---
+              // Jackknife angle between truck heading and trailer angle
+              let jackAngle = Math.abs(
+                ((state.heading - state.trailerAngle + Math.PI) % (2 * Math.PI)) - Math.PI
+              );
+              // 0 rad = perfectly straight (20pts), 0.2 rad (~11°) = 0 pts
+              const alignScore = Math.max(0, 20 * (1 - jackAngle / 0.2));
+
+              const score = Math.round(offsetScore + angleScore + alignScore);
+
+              // Grade label
+              let grade;
+              if      (score >= 90) grade = "Perfect!";
+              else if (score >= 75) grade = "Great";
+              else if (score >= 55) grade = "Good";
+              else if (score >= 35) grade = "Fair";
+              else                  grade = "Poor";
+
+              state.lastDockDoor  = `${bld.id}${i + 1}`;
+              state.lastDockScore = score;
+              state.lastDockGrade = grade;
+              return;
+            }
+          }
+        }
+      }
+
+      /* =====================================
+         DRAWING
+      ===================================== */
+      function drawBackground() {
+        // Base asphalt colour — dark warm grey like worn blacktop
+        ctx.fillStyle = "#2a2a28";
+        ctx.fillRect(-5000, -5000, 10000, 10000);
+
+        // Aggregate texture — varied dot sizes and shades
+        for (let gx = -5000; gx < 5000; gx += 14) {
+          for (let gy = -5000; gy < 5000; gy += 14) {
+            const jx  = ((gx * 7  + gy * 3)  % 11) - 5;
+            const jy  = ((gx * 5  + gy * 11) % 9)  - 4;
+            const rnd = ((gx * 13 + gy * 7)  % 17);
+            if (rnd < 4) {
+              // lighter aggregate chip
+              ctx.fillStyle = "rgba(255,255,255,0.055)";
+              ctx.fillRect(gx + jx, gy + jy, 2, 2);
+            } else if (rnd < 7) {
+              // darker aggregate chip
+              ctx.fillStyle = "rgba(0,0,0,0.15)";
+              ctx.fillRect(gx + jx, gy + jy, 3, 2);
+            } else if (rnd === 7) {
+              // occasional larger light chip
+              ctx.fillStyle = "rgba(255,255,255,0.03)";
+              ctx.fillRect(gx + jx, gy + jy, 4, 3);
+            }
+          }
+        }
+
+        // Subtle worn patches — slightly lighter rectangles scattered around
+        ctx.fillStyle = "rgba(255,255,255,0.018)";
+        for (let px = -4800; px < 5000; px += 320) {
+          for (let py = -4800; py < 5000; py += 280) {
+            const ox = ((px * 9 + py * 5) % 120) - 60;
+            const oy = ((px * 3 + py * 11) % 100) - 50;
+            ctx.fillRect(px + ox, py + oy, 80 + ((px * py) % 60), 40 + ((px + py) % 30));
+          }
+        }
+      }
+
+      function drawYardSurfaces() {
+        for (const bld of buildings) {
+          if (bld.axis === "top") {
+            // Concrete apron — extends from dock face outward past the guide lines
+            const apronY      = bld.y + DOCK_FACE_DEPTH;
+            const apronDepth  = FULL_LENGTH + 80;
+            const apronLeft   = bld.x - 60;
+            const apronRight  = bld.x + bld.width + 60;
+            const apronWidth  = apronRight - apronLeft;
+
+            // Concrete slab — lighter than asphalt
+            ctx.fillStyle = "#4a4a46";
+            ctx.fillRect(apronLeft, apronY, apronWidth, apronDepth);
+
+            // Concrete expansion joints
+            ctx.strokeStyle = "#3a3a37";
+            ctx.lineWidth = 2;
+            for (let jy = apronY + 200; jy < apronY + apronDepth; jy += 200) {
+              ctx.beginPath();
+              ctx.moveTo(apronLeft, jy);
+              ctx.lineTo(apronRight, jy);
+              ctx.stroke();
+            }
+            // Vertical expansion joints
+            for (let jx = apronLeft + 200; jx < apronRight; jx += 200) {
+              ctx.beginPath();
+              ctx.moveTo(jx, apronY);
+              ctx.lineTo(jx, apronY + apronDepth);
+              ctx.stroke();
+            }
+
+            // Concrete edge curb line
+            ctx.strokeStyle = "#666";
+            ctx.lineWidth = 3;
+            ctx.strokeRect(apronLeft, apronY, apronWidth, apronDepth);
+
+          } else {
+            // "right" axis — apron extends left from dock face
+            const apronX      = bld.x - FULL_LENGTH - 80;
+            const apronDepth  = FULL_LENGTH + 80;
+            const apronTop    = bld.y - 60;
+            const apronBottom = bld.y + bld.width + 60;
+            const apronHeight = apronBottom - apronTop;
+
+            ctx.fillStyle = "#4a4a46";
+            ctx.fillRect(apronX, apronTop, apronDepth, apronHeight);
+
+            ctx.strokeStyle = "#3a3a37";
+            ctx.lineWidth = 2;
+            for (let jx = apronX + 200; jx < apronX + apronDepth; jx += 200) {
+              ctx.beginPath();
+              ctx.moveTo(jx, apronTop);
+              ctx.lineTo(jx, apronBottom);
+              ctx.stroke();
+            }
+            for (let jy = apronTop + 200; jy < apronBottom; jy += 200) {
+              ctx.beginPath();
+              ctx.moveTo(apronX, jy);
+              ctx.lineTo(apronX + apronDepth, jy);
+              ctx.stroke();
+            }
+
+            ctx.strokeStyle = "#666";
+            ctx.lineWidth = 3;
+            ctx.strokeRect(apronX, apronTop, apronDepth, apronHeight);
+          }
+        }
+      }
+
+      function drawBuildingTop(bld) {
+        const faceY = bld.y;
+        const wallY = faceY - BUILDING_DEPTH;
+
+        // Warehouse wall
+        ctx.fillStyle = "#3a3a3a";
+        ctx.fillRect(bld.x, wallY, bld.width, BUILDING_DEPTH);
+
+        // Brick lines
+        ctx.strokeStyle = "#2a2a2a";
+        ctx.lineWidth = 1;
+        for (let row = wallY + 16; row < faceY; row += 16) {
+          ctx.beginPath(); ctx.moveTo(bld.x, row); ctx.lineTo(bld.x + bld.width, row); ctx.stroke();
+        }
+        let rowIdx = 0;
+        for (let row = wallY; row < faceY; row += 16) {
+          const offset = (rowIdx++ % 2 === 0) ? 0 : 30;
+          for (let col = bld.x + offset; col < bld.x + bld.width; col += 60) {
+            ctx.beginPath(); ctx.moveTo(col, row); ctx.lineTo(col, row + 16); ctx.stroke();
+          }
+        }
+
+        // Label
+        ctx.fillStyle = "#888"; ctx.font = "bold 20px sans-serif";
+        ctx.textBaseline = "middle"; ctx.textAlign = "center";
+        ctx.fillText(bld.label, bld.x + bld.width / 2, wallY + BUILDING_DEPTH / 2);
+
+        // Dock face
+        ctx.fillStyle = "#555";
+        ctx.fillRect(bld.x, faceY, bld.width, DOCK_FACE_DEPTH);
+        ctx.fillStyle = "#4a4a4a";
+        ctx.fillRect(bld.x, faceY + DOCK_FACE_DEPTH - 8, bld.width, 8);
+
+        ctx.font = "13px sans-serif"; ctx.textBaseline = "bottom"; ctx.textAlign = "center";
+        for (let i = 0; i < bld.doors; i++) {
+          const dc = bld.x + i * DOOR_SPACING + DOOR_SPACING / 2;
+          const dl = dc - DOOR_WIDTH / 2, dr = dc + DOOR_WIDTH / 2;
+          ctx.fillStyle = "#1a1a1a";
+          ctx.fillRect(dl, faceY, DOOR_WIDTH, DOCK_FACE_DEPTH);
+          ctx.strokeStyle = "#666"; ctx.lineWidth = 2;
+          ctx.strokeRect(dl, faceY, DOOR_WIDTH, DOCK_FACE_DEPTH);
+          ctx.fillStyle = "#c8a800";
+          ctx.fillRect(dl - 5, faceY + DOCK_FACE_DEPTH - 18, 5, 14);
+          ctx.fillRect(dr,     faceY + DOCK_FACE_DEPTH - 18, 5, 14);
+          ctx.strokeStyle = "rgba(0,255,0,0.35)"; ctx.lineWidth = 1;
+          ctx.setLineDash([12, 8]);
+          ctx.beginPath();
+          ctx.moveTo(dl, faceY + DOCK_FACE_DEPTH); ctx.lineTo(dl, faceY + DOCK_FACE_DEPTH + FULL_LENGTH);
+          ctx.moveTo(dr, faceY + DOCK_FACE_DEPTH); ctx.lineTo(dr, faceY + DOCK_FACE_DEPTH + FULL_LENGTH);
+          ctx.stroke(); ctx.setLineDash([]);
+          ctx.fillStyle = "#ddd";
+          ctx.fillText(`${bld.id}${i + 1}`, dc, faceY - 4);
+        }
+      }
+
+      function drawBuildingRight(bld) {
+        // Doors face left (west). The building wall is to the RIGHT of the dock face.
+        // bld.x = left edge of dock face. bld.y = top of door run. bld.width = door run height.
+        const faceX = bld.x;
+        const wallX = faceX + DOCK_FACE_DEPTH;  // wall starts after dock face
+
+        // Warehouse wall
+        ctx.fillStyle = "#3a3a3a";
+        ctx.fillRect(wallX, bld.y, BUILDING_DEPTH, bld.width);
+
+        // Brick lines (horizontal stripes = vertical columns on rotated building)
+        ctx.strokeStyle = "#2a2a2a"; ctx.lineWidth = 1;
+        for (let col = wallX + 16; col < wallX + BUILDING_DEPTH; col += 16) {
+          ctx.beginPath(); ctx.moveTo(col, bld.y); ctx.lineTo(col, bld.y + bld.width); ctx.stroke();
+        }
+        let colIdx = 0;
+        for (let col = wallX; col < wallX + BUILDING_DEPTH; col += 16) {
+          const offset = (colIdx++ % 2 === 0) ? 0 : 30;
+          for (let row = bld.y + offset; row < bld.y + bld.width; row += 60) {
+            ctx.beginPath(); ctx.moveTo(col, row); ctx.lineTo(col + 16, row); ctx.stroke();
+          }
+        }
+
+        // Label (rotated)
+        ctx.save();
+        ctx.fillStyle = "#888"; ctx.font = "bold 20px sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.translate(wallX + BUILDING_DEPTH / 2, bld.y + bld.width / 2);
+        ctx.rotate(Math.PI / 2);
+        ctx.fillText(bld.label, 0, 0);
+        ctx.restore();
+
+        // Dock face
+        ctx.fillStyle = "#555";
+        ctx.fillRect(faceX, bld.y, DOCK_FACE_DEPTH, bld.width);
+        ctx.fillStyle = "#4a4a4a";
+        ctx.fillRect(faceX, bld.y, 8, bld.width);
+
+        ctx.font = "13px sans-serif"; ctx.textBaseline = "middle"; ctx.textAlign = "right";
+        for (let i = 0; i < bld.doors; i++) {
+          const dc = bld.y + i * DOOR_SPACING + DOOR_SPACING / 2;
+          const dt = dc - DOOR_WIDTH / 2, db = dc + DOOR_WIDTH / 2;
+          ctx.fillStyle = "#1a1a1a";
+          ctx.fillRect(faceX, dt, DOCK_FACE_DEPTH, DOOR_WIDTH);
+          ctx.strokeStyle = "#666"; ctx.lineWidth = 2;
+          ctx.strokeRect(faceX, dt, DOCK_FACE_DEPTH, DOOR_WIDTH);
+          ctx.fillStyle = "#c8a800";
+          ctx.fillRect(faceX + DOCK_FACE_DEPTH - 18, dt - 5, 14, 5);
+          ctx.fillRect(faceX + DOCK_FACE_DEPTH - 18, db,     14, 5);
+          // Guide lines going left into yard
+          ctx.strokeStyle = "rgba(0,255,0,0.35)"; ctx.lineWidth = 1;
+          ctx.setLineDash([12, 8]);
+          ctx.beginPath();
+          ctx.moveTo(faceX, dt); ctx.lineTo(faceX - FULL_LENGTH, dt);
+          ctx.moveTo(faceX, db); ctx.lineTo(faceX - FULL_LENGTH, db);
+          ctx.stroke(); ctx.setLineDash([]);
+          ctx.fillStyle = "#ddd";
+          ctx.fillText(`${bld.id}${i + 1}`, faceX - 4, dc);
+        }
+        ctx.textAlign = "left";
+      }
+
+      function drawBuildings() {
+        for (const bld of buildings) {
+          if (bld.axis === "top")   drawBuildingTop(bld);
+          if (bld.axis === "right") drawBuildingRight(bld);
+        }
+        ctx.textAlign = "left";
+      }
+
+      function drawObstacles() {
+        for (const o of obstacles) {
+          const angle = o.angle || 0;
+          const cx = o.x + o.w / 2;
+          const cy = o.y + o.h / 2;
+
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(angle);
+
+          if (o.type === "cone") {
+            ctx.fillStyle = "#f80";
+            ctx.beginPath();
+            ctx.moveTo(0, -o.h / 2);
+            ctx.lineTo(-o.w / 2, o.h / 2);
+            ctx.lineTo(o.w / 2, o.h / 2);
+            ctx.closePath();
+            ctx.fill();
+          } else if (o.type === "wall") {
+            ctx.fillStyle = "#666";
+            ctx.fillRect(-o.w / 2, -o.h / 2, o.w, o.h);
+          } else if (o.type === "trailer") {
+            ctx.fillStyle = "#bbb";
+            ctx.fillRect(-o.w / 2, -o.h / 2, o.w, o.h);
+            ctx.fillStyle = "#222";
+            ctx.fillRect(-o.w / 2 + 20, -o.h / 2 - 6, 14, 12);
+            ctx.fillRect(-o.w / 2 + 20,  o.h / 2 - 6, 14, 12);
+          }
+
+          ctx.restore();
+        }
+      }
+
+      function drawTrailer() {
+        ctx.save();
+        ctx.translate(state.trailerX, state.trailerY);
+        ctx.rotate(state.trailerAngle);
+
+        ctx.fillStyle = "#aaa";
+        ctx.fillRect(-trailer.length / 2, -trailer.width / 2, trailer.length, trailer.width);
+
+        // Tandem axles near the rear of the trailer.
+        // Local space: X axis points toward kingpin (front). Rear is at -trailer.length/2.
+        // 53ft trailer: 1ft ~ 6px. Tandems sit ~4ft and ~8ft from the rear.
+        const rearX  = -trailer.length / 2;
+        const axle1X = rearX + 70;   // ~10ft from rear
+        const axle2X = rearX + 50;   // closer tandem spread
+
+        // Each tire is a small rectangle flanking the trailer body on left and right.
+        // tireW = fore-aft footprint (along X), tireH = how far it sticks out (along Y).
+        const tireW    = 14;  // fore-aft length of tire
+        const tireH    = 1.5;   // outboard thickness of each tire
+        const dualGap  = 2;   // gap between inner and outer tire of dual pair
+        const sideEdge = trailer.width / 2; // trailer body edge
+
+        ctx.fillStyle = "#111";
+        for (const axleX of [axle1X, axle2X]) {
+          const tx = axleX - tireW / 2;
+
+          // Left side (negative Y): inner tire flush to body, outer tire beyond it
+          ctx.fillRect(tx, -(sideEdge + tireH),              tireW, tireH); // inner
+          ctx.fillRect(tx, -(sideEdge + tireH * 2 + dualGap), tireW, tireH); // outer
+
+          // Right side (positive Y): inner tire flush to body, outer tire beyond it
+          ctx.fillRect(tx,  sideEdge,                         tireW, tireH); // inner
+          ctx.fillRect(tx,  sideEdge + tireH + dualGap,       tireW, tireH); // outer
+        }
+
+        ctx.restore();
+      }
+
+      function drawTruck() {
+        ctx.save();
+        ctx.translate(state.x, state.y);
+        ctx.rotate(state.heading);
+
+        const rear      = -truck.hitchToRear;
+        const front     = truck.length - truck.hitchToRear;
+        const hw        = truck.width / 2;
+
+        // --- Fifth wheel plate (sits at rear, under trailer) ---
+        ctx.fillStyle = "#555";
+        ctx.beginPath();
+        ctx.ellipse(rear + 6, 0, 12, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // --- Fuel tanks (slim rectangles on each side, inside cab) ---
+        ctx.fillStyle = "#777";
+        ctx.fillRect(rear + 14, -hw + 1, 12, 6);
+        ctx.fillRect(rear + 14,  hw - 7, 12, 6);
+
+        // --- Main cab body ---
+        const cabRear  = rear + 12;
+        const cabFront = front;
+        const r = 7;
+        ctx.fillStyle = "#1a8fd1";
+        ctx.beginPath();
+        ctx.moveTo(cabRear, -hw);
+        ctx.lineTo(cabFront - r, -hw);
+        ctx.quadraticCurveTo(cabFront, -hw, cabFront, -hw + r);
+        ctx.lineTo(cabFront,  hw - r);
+        ctx.quadraticCurveTo(cabFront,  hw, cabFront - r,  hw);
+        ctx.lineTo(cabRear,  hw);
+        ctx.closePath();
+        ctx.fill();
+
+        // Cab highlight stripe
+        ctx.fillStyle = "#2aa8f5";
+        ctx.fillRect(cabRear, -hw + 4, (cabFront - cabRear) * 0.55, hw * 2 - 8);
+
+        // --- Hood / engine cover (front lower section) ---
+        ctx.fillStyle = "#157ab5";
+        ctx.fillRect(cabRear, -hw, 20, hw * 2);
+
+        // Hood line
+        ctx.strokeStyle = "#0e5a8a";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(cabRear + 20, -hw);
+        ctx.lineTo(cabRear + 20,  hw);
+        ctx.stroke();
+
+        // --- Windshield ---
+        const wsLeft  = cabRear + 22;
+        const wsRight = cabFront - 4;
+        ctx.fillStyle = "rgba(150, 220, 255, 0.55)";
+        ctx.beginPath();
+        ctx.moveTo(wsLeft,  -hw + 5);
+        ctx.lineTo(wsRight - 2, -hw + 5);
+        ctx.lineTo(wsRight - 2,  hw - 5);
+        ctx.lineTo(wsLeft,       hw - 5);
+        ctx.closePath();
+        ctx.fill();
+
+        // Windshield frame
+        ctx.strokeStyle = "#0e5a8a";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Center divider
+        ctx.beginPath();
+        ctx.moveTo((wsLeft + wsRight) / 2, -hw + 5);
+        ctx.lineTo((wsLeft + wsRight) / 2,  hw - 5);
+        ctx.strokeStyle = "#0e5a8a";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // --- Bumper ---
+        ctx.fillStyle = "#ccc";
+        ctx.fillRect(cabFront - 3, -hw + 4, 5, hw * 2 - 8);
+
+        // Bumper bolts
+        ctx.fillStyle = "#999";
+        ctx.beginPath(); ctx.arc(cabFront - 1, -hw + 10, 2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cabFront - 1,  hw - 10, 2, 0, Math.PI * 2); ctx.fill();
+
+        // --- Headlights ---
+        ctx.fillStyle = "#ffffaa";
+        ctx.fillRect(cabFront - 2, -hw + 4, 4, 7);
+        ctx.fillRect(cabFront - 2,  hw - 11, 4, 7);
+
+        // --- Exhaust stacks (behind cab on each side) ---
+        ctx.fillStyle = "#444";
+        ctx.fillRect(cabRear + 2, -hw - 3, 4, 4);
+        ctx.fillRect(cabRear + 2,  hw - 1, 4, 4);
+        ctx.fillStyle = "#222";
+        ctx.beginPath(); ctx.arc(cabRear + 4, -hw - 1, 2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cabRear + 4,  hw + 1, 2, 0, Math.PI * 2); ctx.fill();
+
+        // --- Drive axle dual tires (slightly outside cab width) ---
+        const driveAxleX = rear + 4;
+        const tireW = 14, tireH = 3, dualGap = 1;
+        const tireOut = 2; // how far past cab edge
+        ctx.fillStyle = "#111";
+        // Left side
+        ctx.fillRect(driveAxleX - tireW / 2, -hw - tireH * 2 - dualGap - tireOut, tireW, tireH);
+        ctx.fillRect(driveAxleX - tireW / 2, -hw - tireH - tireOut,                tireW, tireH);
+        // Right side
+        ctx.fillRect(driveAxleX - tireW / 2,  hw + tireOut,                        tireW, tireH);
+        ctx.fillRect(driveAxleX - tireW / 2,  hw + tireH + dualGap + tireOut,      tireW, tireH);
+        // Axle bar
+        ctx.fillStyle = "#333";
+        ctx.fillRect(driveAxleX - 2, -hw, 4, hw * 2);
+
+        // --- Steer axle — axle bar is fixed, only tires rotate ---
+        const frontAxleX = -truck.hitchToRear + truck.wheelbase;
+
+        // Fixed axle bar
+        ctx.fillStyle = "#333";
+        ctx.fillRect(frontAxleX - 2, -hw, 4, hw * 2);
+
+        // Left tire — rotates around its own pivot at (frontAxleX, -hw)
+        ctx.save();
+        ctx.translate(frontAxleX, -hw - tireOut);
+        ctx.rotate(state.steerAngle);
+        ctx.fillStyle = "#111";
+        ctx.fillRect(-tireW / 2, -tireH, tireW, tireH);
+        ctx.restore();
+
+        // Right tire — rotates around its own pivot at (frontAxleX, hw)
+        ctx.save();
+        ctx.translate(frontAxleX, hw + tireOut);
+        ctx.rotate(state.steerAngle);
+        ctx.fillStyle = "#111";
+        ctx.fillRect(-tireW / 2, 0, tireW, tireH);
+        ctx.restore();
+
+        ctx.restore();
+      }
+
+      function drawHUD() {
+        if (state.collision) {
+          statusLine.textContent = "Collision! Reset to try again.";
+        } else if (state.jackknife) {
+          statusLine.textContent = "Jackknifed! Reset to try again.";
+        } else {
+          const speedStr   = state.speed.toFixed(2);
+          const steerDeg   = ((state.steerAngle * 180) / Math.PI).toFixed(0);
+          statusLine.textContent = `Speed: ${speedStr} | Steering: ${steerDeg}° | Tandems: ${state.tandemMode}`;
+        }
+
+        scoreLine.textContent = state.lastDockScore != null
+          ? `Dock ${state.lastDockDoor}: ${state.lastDockScore}/100 — ${state.lastDockGrade} | Total: ${state.score}`
+          : `Total Score: ${state.score}`;
+      }
+
+      /* =====================================
+         MIRRORS
+      ===================================== */
+      const mirrorCanvasL = document.getElementById("mirrorCanvasL");
+      const mirrorCanvasR = document.getElementById("mirrorCanvasR");
+      const mctxL = mirrorCanvasL.getContext("2d");
+      const mctxR = mirrorCanvasR.getContext("2d");
+
+      const MIRROR_ZOOM   = 0.35;
+      const MIRROR_W      = 90;
+      const MIRROR_H      = 60;
+
+      // mirror side: -1 = left, +1 = right
+      // The mirror looks rearward and outward from the truck cab
+      function drawMirror(mctx, side) {
+        mctx.clearRect(0, 0, MIRROR_W, MIRROR_H);
+
+        // Dark background
+        mctx.fillStyle = "#111";
+        mctx.fillRect(0, 0, MIRROR_W, MIRROR_H);
+
+        mctx.save();
+
+        // Anchor to center of mirror canvas
+        mctx.translate(MIRROR_W / 2, MIRROR_H / 2);
+
+        // Mirror POV: looking rearward (180° from heading) and rotated outward ~30°
+        const mirrorAngle = state.heading + Math.PI + side * 0.4;
+        mctx.rotate(-mirrorAngle - Math.PI / 2);
+
+        mctx.scale(MIRROR_ZOOM, MIRROR_ZOOM);
+
+        // Mirror eye position: beside the cab, slightly behind
+        const eyeX = state.x + Math.cos(state.heading + side * Math.PI / 2) * (truck.width * 0.6);
+        const eyeY = state.y + Math.sin(state.heading + side * Math.PI / 2) * (truck.width * 0.6);
+        mctx.translate(-eyeX, -eyeY);
+
+        // Draw world into mirror
+        drawMirrorBackground(mctx);
+        drawMirrorDock(mctx);
+        drawMirrorObstacles(mctx);
+        drawMirrorTrailer(mctx);
+
+        mctx.restore();
+
+        // Slight curved-glass vignette overlay
+        const grad = mctx.createRadialGradient(MIRROR_W/2, MIRROR_H/2, MIRROR_H*0.3, MIRROR_W/2, MIRROR_H/2, MIRROR_H*0.85);
+        grad.addColorStop(0, "rgba(0,0,0,0)");
+        grad.addColorStop(1, "rgba(0,0,0,0.55)");
+        mctx.fillStyle = grad;
+        mctx.fillRect(0, 0, MIRROR_W, MIRROR_H);
+      }
+
+      function drawMirrorBackground(mctx) {
+        mctx.fillStyle = "#2a2a28";
+        mctx.fillRect(-5000, -5000, 10000, 10000);
+      }
+
+      function drawMirrorDock(mctx) {
+        for (const bld of buildings) {
+          if (bld.axis === "top") {
+            mctx.fillStyle = "#3a3a3a";
+            mctx.fillRect(bld.x, bld.y - BUILDING_DEPTH, bld.width, BUILDING_DEPTH);
+            mctx.fillStyle = "#555";
+            mctx.fillRect(bld.x, bld.y, bld.width, DOCK_FACE_DEPTH);
+            for (let i = 0; i < bld.doors; i++) {
+              const dc = bld.x + i * DOOR_SPACING + DOOR_SPACING / 2;
+              mctx.fillStyle = "#1a1a1a";
+              mctx.fillRect(dc - DOOR_WIDTH / 2, bld.y, DOOR_WIDTH, DOCK_FACE_DEPTH);
+            }
+          } else if (bld.axis === "right") {
+            mctx.fillStyle = "#3a3a3a";
+            mctx.fillRect(bld.x + DOCK_FACE_DEPTH, bld.y, BUILDING_DEPTH, bld.width);
+            mctx.fillStyle = "#555";
+            mctx.fillRect(bld.x, bld.y, DOCK_FACE_DEPTH, bld.width);
+            for (let i = 0; i < bld.doors; i++) {
+              const dc = bld.y + i * DOOR_SPACING + DOOR_SPACING / 2;
+              mctx.fillStyle = "#1a1a1a";
+              mctx.fillRect(bld.x, dc - DOOR_WIDTH / 2, DOCK_FACE_DEPTH, DOOR_WIDTH);
+            }
+          }
+        }
+      }
+
+      function drawMirrorObstacles(mctx) {
+        for (const o of obstacles) {
+          const angle = o.angle || 0;
+          const cx = o.x + o.w / 2, cy = o.y + o.h / 2;
+          mctx.save();
+          mctx.translate(cx, cy);
+          mctx.rotate(angle);
+          if (o.type === "cone") {
+            mctx.fillStyle = "#f80";
+            mctx.beginPath();
+            mctx.moveTo(0, -o.h / 2);
+            mctx.lineTo(-o.w / 2, o.h / 2);
+            mctx.lineTo(o.w / 2, o.h / 2);
+            mctx.closePath();
+            mctx.fill();
+          } else if (o.type === "wall") {
+            mctx.fillStyle = "#666";
+            mctx.fillRect(-o.w / 2, -o.h / 2, o.w, o.h);
+          } else if (o.type === "trailer") {
+            mctx.fillStyle = "#bbb";
+            mctx.fillRect(-o.w / 2, -o.h / 2, o.w, o.h);
+          }
+          mctx.restore();
+        }
+      }
+
+      function drawMirrorTrailer(mctx) {
+        mctx.save();
+        mctx.translate(state.trailerX, state.trailerY);
+        mctx.rotate(state.trailerAngle);
+        mctx.fillStyle = "#aaa";
+        mctx.fillRect(-trailer.length / 2, -trailer.width / 2, trailer.length, trailer.width);
+        mctx.restore();
+      }
+
+      /* =====================================
+         MAIN LOOP
+      ===================================== */
+      let lastTime = performance.now();
+
+      function loop(ts = performance.now()) {
+        const dt = Math.min(1 / 30, (ts - lastTime) / 1000);
+        lastTime = ts;
+
+        update(dt);
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const viewW = canvas.width;
+        const viewH = canvas.height;
+
+        // Smooth-follow camera
+        const targetX = state.x - Math.cos(state.heading) * CHASE_DISTANCE;
+        const targetY = state.y - Math.sin(state.heading) * CHASE_DISTANCE;
+        camera.x += (targetX - camera.x) * 0.08;
+        camera.y += (targetY - camera.y) * 0.08;
+
+        ctx.save();
+        ctx.translate(viewW / 2, viewH * 0.75);
+        ctx.rotate(-state.heading - Math.PI / 2);
+        ctx.scale(camera.zoom, camera.zoom);
+        ctx.translate(-camera.x, -camera.y);
+
+        drawBackground();
+        drawYardSurfaces();
+        drawBuildings();
+        drawObstacles();
+        drawTruck();
+        drawTrailer();
+
+        ctx.restore();
+
+        drawHUD();
+        drawMirror(mctxL, -1);
+        drawMirror(mctxR,  1);
+
+        requestAnimationFrame(loop);
+      }
+
+      /* =====================================
+         INIT
+      ===================================== */
+      reset();
+      camera.x = state.x;
+      camera.y = state.y;
+      requestAnimationFrame(loop);
+    </script>
+  </body>
+</html>
