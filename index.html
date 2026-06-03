@@ -272,8 +272,8 @@
       };
 
       // Tandem slide positions (kingpin → rear axle distance)
-      const TANDEM_BACK    = trailer.length - trailer.kingpinToFront; // Highway (default)
-      const TANDEM_FORWARD = TANDEM_BACK - 60;                        // City (tighter turns)
+      const TANDEM_BACK    = trailer.length - trailer.kingpinToFront; // Highway (default — axles at rear)
+      const TANDEM_FORWARD = TANDEM_BACK - 60;                        // City (axles slid forward ~10ft)
 
       /* =====================================
          STATE
@@ -290,7 +290,7 @@
         speed: 0,
         steerAngle: 0,
         tandemMode: "highway",
-        axleOffset: 0,
+        axleOffset: TANDEM_BACK,
         collision: false,
         jackknife: false,
         lastDockDoor: null,
@@ -940,7 +940,7 @@
             if (polysIntersect(trailerPoly, doorPoly)) {
               // --- Lateral offset score (40 pts) ---
               // Perfect = rear dead centre on door. Half door width (~35px) = 0 pts.
-              const maxOffset = DOOR_WIDTH / 2;
+              const maxOffset = DOOR_WIDTH;
               const offsetScore = Math.max(0, 40 * (1 - offset / maxOffset));
 
               // --- Trailer angle vs dock axis (40 pts) ---
@@ -959,7 +959,7 @@
               // Normalise to [0, PI]
               while (angleDiff > Math.PI) angleDiff = Math.abs(angleDiff - 2 * Math.PI);
               // 0 rad = perfect (40pts), 0.15 rad (~9°) = 0 pts
-              const angleScore = Math.max(0, 40 * (1 - angleDiff / 0.15));
+              const angleScore = Math.max(0, 40 * (1 - angleDiff / 0.25));
 
               // --- Truck/trailer alignment score (20 pts) ---
               // Jackknife angle between truck heading and trailer angle
@@ -967,7 +967,7 @@
                 ((state.heading - state.trailerAngle + Math.PI) % (2 * Math.PI)) - Math.PI
               );
               // 0 rad = perfectly straight (20pts), 0.2 rad (~11°) = 0 pts
-              const alignScore = Math.max(0, 20 * (1 - jackAngle / 0.2));
+              const alignScore = Math.max(0, 20 * (1 - jackAngle / 0.35));
 
               const score = Math.round(offsetScore + angleScore + alignScore);
 
@@ -1264,12 +1264,16 @@
         ctx.fillStyle = "#aaa";
         ctx.fillRect(-trailer.length / 2, -trailer.width / 2, trailer.length, trailer.width);
 
-        // Tandem axles near the rear of the trailer.
-        // Local space: X axis points toward kingpin (front). Rear is at -trailer.length/2.
-        // 53ft trailer: 1ft ~ 6px. Tandems sit ~4ft and ~8ft from the rear.
-        const rearX  = -trailer.length / 2;
-        const axle1X = rearX + 70;   // ~10ft from rear
-        const axle2X = rearX + 50;   // closer tandem spread
+        // Tandem axles — position driven by axleOffset (kingpin → axle distance)
+        // In trailer local space, kingpin is at +trailer.kingpinToFront from front edge
+        // Front edge is at -trailer.length/2 in local space
+        // So kingpin local X = -trailer.length/2 + trailer.kingpinToFront
+        const kingpinLocalX = -trailer.length / 2 + trailer.kingpinToFront;
+        // Rear axle group centre = kingpin - axleOffset (going rearward = more negative)
+        const axleCentreX   = kingpinLocalX - state.axleOffset + trailer.length;
+        // Two axles spread 20 units apart around the centre
+        const axle1X = axleCentreX + 10;
+        const axle2X = axleCentreX - 10;
 
         // Each tire is a small rectangle flanking the trailer body on left and right.
         // tireW = fore-aft footprint (along X), tireH = how far it sticks out (along Y).
