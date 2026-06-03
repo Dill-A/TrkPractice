@@ -1,0 +1,25 @@
+{
+  "name": "Truck & Trailer Backing Simulator",
+  "short_name": "TruckSim",
+  "description": "Practice backing a 53ft trailer to loading docks",
+  "start_url": "/TrkPractice/",
+  "scope": "/TrkPractice/",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#1e1e1e",
+  "theme_color": "#111111",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
