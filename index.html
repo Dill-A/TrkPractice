@@ -4,6 +4,11 @@
     <meta charset="UTF-8" />
     <title>Truck &amp; 53ft Trailer Backing Simulator</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="TruckSim" />
+    <meta name="theme-color" content="#111111" />
+    <link rel="manifest" href="manifest.json" />
     <style>
       html, body {
         margin: 0;
@@ -105,6 +110,55 @@
         margin-top: 4px;
         font-size: 11px;
         color: #666;
+      }
+
+      #popup {
+        position: fixed;
+        top: 40%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(0.8);
+        background: rgba(0, 0, 0, 0.88);
+        border-radius: 16px;
+        padding: 20px 32px;
+        text-align: center;
+        pointer-events: none;
+        z-index: 100;
+        opacity: 0;
+        transition: opacity 0.15s ease, transform 0.15s ease;
+        min-width: 220px;
+        border: 2px solid #555;
+      }
+
+      #popup.show {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+      }
+
+      #popup.collision {
+        border-color: #e33;
+        box-shadow: 0 0 30px rgba(220, 50, 50, 0.5);
+      }
+
+      #popup.jackknife {
+        border-color: #e83;
+        box-shadow: 0 0 30px rgba(220, 130, 50, 0.5);
+      }
+
+      #popup.score-perfect  { border-color: #0f0; box-shadow: 0 0 30px rgba(0, 255, 80, 0.5); }
+      #popup.score-great    { border-color: #0cf; box-shadow: 0 0 30px rgba(0, 200, 255, 0.4); }
+      #popup.score-good     { border-color: #ff0; box-shadow: 0 0 30px rgba(255, 220, 0, 0.4); }
+      #popup.score-fair     { border-color: #f80; box-shadow: 0 0 30px rgba(255, 140, 0, 0.3); }
+      #popup.score-poor     { border-color: #f44; box-shadow: 0 0 30px rgba(255, 60, 60, 0.3); }
+
+      #popupTitle {
+        font-size: clamp(18px, 5vw, 26px);
+        font-weight: bold;
+        margin-bottom: 6px;
+      }
+
+      #popupBody {
+        font-size: clamp(13px, 3.5vw, 17px);
+        color: #ccc;
       }
 
       @media (max-width: 768px) {
@@ -216,14 +270,39 @@
       <div id="keyLegend">W/S: Fwd/Rev &nbsp; A/D: Steer &nbsp; Q: Brake &nbsp; E: Center &nbsp; R: Reset &nbsp; F: Tandems</div>
     </div>
 
+    <div id="popup">
+      <div id="popupTitle"></div>
+      <div id="popupBody"></div>
+    </div>
+
     <script>
       /* =====================================
          CANVAS & DOM REFERENCES
       ===================================== */
       const canvas = document.getElementById("sim");
       const ctx = canvas.getContext("2d");
-      const statusLine = document.getElementById("statusLine");
-      const scoreLine = document.getElementById("scoreLine");
+      const statusLine  = document.getElementById("statusLine");
+      const scoreLine   = document.getElementById("scoreLine");
+      const popup       = document.getElementById("popup");
+      const popupTitle  = document.getElementById("popupTitle");
+      const popupBody   = document.getElementById("popupBody");
+
+      let popupTimer = null;
+
+      function showPopup(title, body, type, duration = 2500) {
+        // Clear any existing timer
+        if (popupTimer) clearTimeout(popupTimer);
+
+        // Reset classes
+        popup.className = `show ${type}`;
+        popupTitle.textContent = title;
+        popupBody.textContent  = body;
+
+        popupTimer = setTimeout(() => {
+          popup.classList.remove("show");
+          popupTimer = null;
+        }, duration);
+      }
       const controlsEl = document.getElementById("controls");
 
       /* =====================================
@@ -575,38 +654,49 @@
       document.querySelectorAll("#controls .btn").forEach((btn) => {
         btn.addEventListener("touchstart", (e) => { e.preventDefault(); }, { passive: false });
 
-        btn.addEventListener("pointerdown", () => {
-          switch (btn.dataset.a) {
-            case "left":   keys.ArrowLeft  = true;  break;
-            case "right":  keys.ArrowRight = true;  break;
-            case "fwd":    keys.ArrowUp    = true;  break;
-            case "rev":    keys.ArrowDown  = true;  break;
-            case "brake":  keys.Space      = true;  break;
-            case "reset":  reset(); break;
-            case "tandem": toggleTandem(); break;
-            case "center":
-              keys.ArrowLeft  = false;
-              keys.ArrowRight = false;
-              state.steerAngle = 0;
-              break;
-          }
-        });
+        // Use touchstart/touchend instead of pointer events for hold buttons
+        // This is more reliable on iOS for long presses
+        const holdKeys = {
+          "left":  "ArrowLeft",
+          "right": "ArrowRight",
+          "fwd":   "ArrowUp",
+          "rev":   "ArrowDown",
+          "brake": "Space",
+        };
 
-        btn.addEventListener("pointerup", () => {
-          switch (btn.dataset.a) {
-            case "left":  keys.ArrowLeft  = false; break;
-            case "right": keys.ArrowRight = false; break;
-            case "fwd":   keys.ArrowUp    = false; break;
-            case "rev":   keys.ArrowDown  = false; break;
-            case "brake": keys.Space      = false; break;
-          }
-        });
+        const action = btn.dataset.a;
 
-        ["pointercancel", "pointerleave"].forEach((evt) => {
-          btn.addEventListener(evt, () => {
-            keys.ArrowLeft = keys.ArrowRight = keys.ArrowUp = keys.ArrowDown = keys.Space = false;
+        if (action in holdKeys) {
+          const key = holdKeys[action];
+
+          btn.addEventListener("touchstart", (e) => {
+            e.preventDefault();
+            keys[key] = true;
+          }, { passive: false });
+
+          btn.addEventListener("touchend",    () => { keys[key] = false; });
+          btn.addEventListener("touchcancel", () => { keys[key] = false; });
+
+          // Also keep pointer events for mouse (desktop)
+          btn.addEventListener("mousedown", () => { keys[key] = true;  });
+          btn.addEventListener("mouseup",   () => { keys[key] = false; });
+          btn.addEventListener("mouseleave",() => { keys[key] = false; });
+
+        } else {
+          // One-shot buttons (reset, tandem, center)
+          btn.addEventListener("touchstart", (e) => {
+            e.preventDefault();
+            if (action === "reset")  reset();
+            if (action === "tandem") toggleTandem();
+            if (action === "center") { keys.ArrowLeft = false; keys.ArrowRight = false; state.steerAngle = 0; }
+          }, { passive: false });
+
+          btn.addEventListener("mousedown", () => {
+            if (action === "reset")  reset();
+            if (action === "tandem") toggleTandem();
+            if (action === "center") { keys.ArrowLeft = false; keys.ArrowRight = false; state.steerAngle = 0; }
           });
-        });
+        }
       });
 
       /* =====================================
@@ -682,6 +772,11 @@
       ===================================== */
       function reset() {
         resize();
+        _lastCollision = false;
+        _lastJackknife = false;
+        _lastDockScore = null;
+        if (popupTimer) { clearTimeout(popupTimer); popupTimer = null; }
+        popup.className = "";
         generateObstacles();
 
         // Sync axle offset with current tandem mode
@@ -1437,15 +1532,49 @@
         ctx.restore();
       }
 
+      let _lastCollision   = false;
+      let _lastJackknife   = false;
+      let _lastDockScore   = null;
+
       function drawHUD() {
         if (state.collision) {
-          statusLine.textContent = "Collision! Reset to try again.";
+          statusLine.textContent = "💥 Collision! Reset to try again.";
+          if (!_lastCollision) showPopup("💥 COLLISION!", "Hit Reset to continue", "collision", 3000);
         } else if (state.jackknife) {
-          statusLine.textContent = "Jackknifed! Reset to try again.";
+          statusLine.textContent = "⚠️ Jackknifed! Reset to try again.";
+          if (!_lastJackknife) showPopup("⚠️ JACKKNIFED!", "Hit Reset to continue", "jackknife", 3000);
         } else {
-          const speedStr   = state.speed.toFixed(2);
-          const steerDeg   = ((state.steerAngle * 180) / Math.PI).toFixed(0);
+          const speedStr = state.speed.toFixed(2);
+          const steerDeg = ((state.steerAngle * 180) / Math.PI).toFixed(0);
           statusLine.textContent = `Speed: ${speedStr} | Steering: ${steerDeg}° | Tandems: ${state.tandemMode}`;
+        }
+
+        _lastCollision = state.collision;
+        _lastJackknife = state.jackknife;
+
+        if (state.lastDockScore !== null && state.lastDockScore !== _lastDockScore) {
+          _lastDockScore = state.lastDockScore;
+          const gradeColors = {
+            "Perfect!": "score-perfect",
+            "Great":    "score-great",
+            "Good":     "score-good",
+            "Fair":     "score-fair",
+            "Poor":     "score-poor",
+          };
+          const gradeEmojis = {
+            "Perfect!": "🏆",
+            "Great":    "⭐",
+            "Good":     "👍",
+            "Fair":     "👌",
+            "Poor":     "😬",
+          };
+          const g = state.lastDockGrade;
+          showPopup(
+            `${gradeEmojis[g]} ${g.toUpperCase()}`,
+            `Dock ${state.lastDockDoor}  •  ${state.lastDockScore}/100\nTotal: ${state.score}`,
+            gradeColors[g],
+            3000
+          );
         }
 
         scoreLine.textContent = state.lastDockScore != null
