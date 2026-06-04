@@ -1725,7 +1725,7 @@
         ctx.save();
         ctx.translate(frontAxleX, -hw);
         ctx.rotate(state.steerAngle);
-        ctx.fillStyle = "#111";
+        ctx.fillStyle = "#e87020";
         ctx.fillRect(-tireW / 2, -tireH, tireW, tireH);
         ctx.restore();
 
@@ -1733,7 +1733,7 @@
         ctx.save();
         ctx.translate(frontAxleX, hw);
         ctx.rotate(state.steerAngle);
-        ctx.fillStyle = "#111";
+        ctx.fillStyle = "#e87020";
         ctx.fillRect(-tireW / 2, 0, tireW, tireH);
         ctx.restore();
 
@@ -2291,13 +2291,15 @@
 
       function renderLeaderboard() {
         lbBody.innerHTML = "";
-        if (lbEntries.length === 0) {
-          lbBody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#666;padding:12px">No entries yet</td></tr>`;
+        const sorted = [...lbEntries].sort((a, b) => b.score - a.score).slice(0, 10);
+        if (sorted.length === 0) {
+          lbBody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#666;padding:12px">No entries yet — be the first!</td></tr>`;
           return;
         }
-        lbEntries.forEach((e, i) => {
+        sorted.forEach((e, i) => {
+          const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}`;
           const tr = document.createElement("tr");
-          tr.innerHTML = `<td>${i + 1}</td><td>${e.name}</td><td>${e.score.toFixed(1)}</td><td>${e.date}</td>`;
+          tr.innerHTML = `<td style="text-align:center">${medal}</td><td>${e.name}</td><td style="text-align:right">${Number(e.score).toFixed(1)}</td><td style="text-align:right;color:#888">${e.date}</td>`;
           lbBody.appendChild(tr);
         });
       }
@@ -2309,7 +2311,7 @@
             headers: { "X-Master-Key": LB_API_KEY }
           });
           const data = await res.json();
-          lbEntries  = data.record.scores || [];
+          lbEntries  = (data.record.scores || []).filter(e => e.score > 0);
           renderLeaderboard();
         } catch(e) {
           lbBody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#e44;padding:12px">Failed to load</td></tr>`;
@@ -2351,7 +2353,7 @@
             headers: { "X-Master-Key": LB_API_KEY }
           });
           const data = await res.json();
-          lbEntries  = data.record.scores || [];
+          lbEntries  = (data.record.scores || []).filter(e => e.score > 0);
         } catch(e) {}
         lbEntries.push({ name, score, date });
         lbEntries.sort((a, b) => b.score - a.score);
