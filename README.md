@@ -6,7 +6,21 @@ A browser-based truck and trailer backing simulator built for practicing dock ma
 
 **<https://dill-a.github.io/TrkPractice>**
 
-Works on iPhone, Android, and Windows. On iPhone, tap **Share → Add to Home Screen** to install it as a fullscreen app.
+Works on iPhone, Android, Windows, and Mac.
+
+-----
+
+## Install as an App (Fullscreen)
+
+|Platform                |How to Install                                       |
+|------------------------|-----------------------------------------------------|
+|**iPhone / iPad**       |Safari → Share → Add to Home Screen                  |
+|**Android**             |Chrome → ⋮ menu → Add to Home Screen                 |
+|**Windows / Mac Chrome**|Address bar → install icon (⊕) on the right          |
+|**Windows / Mac Edge**  |Address bar → install icon or ⋮ menu → Apps → Install|
+|**Samsung Browser**     |Menu → Add page to → Home screen                     |
+
+Once installed it opens fullscreen with no browser chrome, just like a native app.
 
 -----
 
@@ -24,7 +38,7 @@ Works on iPhone, Android, and Windows. On iPhone, tap **Share → Add to Home Sc
 - Animated score and collision popups
 - Detailed truck cab and 53ft trailer visuals
 - Frame-rate independent physics (consistent on all devices)
-- Installable as a PWA on iOS and Android
+- Installable as a PWA on all major platforms
 
 ## Controls
 
@@ -74,7 +88,7 @@ Each dock attempt is scored out of 100 points:
 
 - Vanilla HTML, CSS, and JavaScript — no frameworks or libraries
 - Single HTML file, runs entirely in the browser
-- `manifest.json` — enables “Add to Home Screen” as a fullscreen PWA on iOS and Android
+- `manifest.json` — enables fullscreen PWA installation on all major platforms
 - Hosted via GitHub Pages
 
 ## Repository Files
