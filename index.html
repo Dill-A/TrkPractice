@@ -2307,43 +2307,41 @@
       async function fetchLeaderboard() {
         lbBody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#666;padding:12px">Loading...</td></tr>`;
         try {
-          // Make bin public first (safe to call repeatedly — no-op if already public)
+          // Make bin public
           await fetch(`https://api.jsonbin.io/v3/b/${LB_BIN_ID}/meta/privacy`, {
             method: "PUT",
             headers: {
               "X-Master-Key": LB_API_KEY,
               "X-Bin-Private": "false",
+              "Content-Type": "application/json",
             },
           });
+        } catch(e) { /* ignore — may already be public */ }
+        try {
           const res  = await fetch(LB_URL + "/latest", {
-            headers: {
-              "X-Master-Key": LB_API_KEY,
-              "X-Access-Key": LB_API_KEY,
-            }
+            headers: { "X-Master-Key": LB_API_KEY }
           });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
           lbEntries  = (data.record.scores || []).filter(e => e.score > 0);
           renderLeaderboard();
         } catch(e) {
-          lbBody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#e44;padding:12px">Failed to load — check connection</td></tr>`;
           console.warn("Leaderboard fetch error:", e);
+          lbBody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#e44;padding:12px">Failed to load (${e.message})</td></tr>`;
         }
       }
 
       async function pushLeaderboard() {
         try {
           await fetch(LB_URL, {
-            method:  "PUT",
+            method: "PUT",
             headers: {
               "Content-Type": "application/json",
               "X-Master-Key": LB_API_KEY,
-              "X-Access-Key": LB_API_KEY,
             },
             body: JSON.stringify({ scores: lbEntries }),
           });
-        } catch(e) {
-          console.warn("Failed to save leaderboard:", e);
-        }
+        } catch(e) { console.warn("Failed to save leaderboard:", e); }
       }
 
       function openLeaderboard() {
@@ -2363,10 +2361,7 @@
         // Re-fetch first to get latest
         try {
           const res  = await fetch(LB_URL + "/latest", {
-            headers: {
-              "X-Master-Key": LB_API_KEY,
-              "X-Access-Key": LB_API_KEY,
-            }
+            headers: { "X-Master-Key": LB_API_KEY }
           });
           const data = await res.json();
           lbEntries  = (data.record.scores || []).filter(e => e.score > 0);
