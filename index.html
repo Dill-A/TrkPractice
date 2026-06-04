@@ -378,6 +378,8 @@
         score: 0,
         docked: false,
         framesSinceReset: 0,
+        prevHx: 0,
+        prevHy: 0,
       };
 
       const camera = { x: 0, y: 0, zoom: ZOOM_DEFAULT };
@@ -801,6 +803,8 @@
         // Initialise trailer geometry
         const hx = state.x - truck.hitchToRear * Math.cos(state.heading);
         const hy = state.y - truck.hitchToRear * Math.sin(state.heading);
+        state.prevHx = hx;
+        state.prevHy = hy;
 
         // Trailer geometry
         const trailerL        = state.axleOffset;
@@ -867,25 +871,22 @@
         const hx = state.x - truck.hitchToRear * ch;
         const hy = state.y - truck.hitchToRear * sh;
 
-        // --- Trailer physics: geometric articulated model ---
-        // The kingpin moves with the truck. The rear axle can only roll along
-        // the trailer axis — no lateral slip. We derive the new trailer angle
-        // purely from the constraint that the axle→kingpin distance stays fixed.
+        // --- Trailer physics: kingpin drags axle ---
+        // Each frame the kingpin moves. The axle must stay exactly trailerL
+        // behind the kingpin. We derive the new trailer angle from the
+        // current axle position to the new kingpin position, then repin.
         const trailerL = state.axleOffset;
 
-        // New trailer angle = direction from rear axle to kingpin
-        const dx = hx - state.rearAxleX;
-        const dy = hy - state.rearAxleY;
+        const dx   = hx - state.rearAxleX;
+        const dy   = hy - state.rearAxleY;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        // If kingpin somehow drifted too far, snap axle back onto the rod
         if (dist > 0.001) {
           state.trailerAngle = Math.atan2(dy, dx);
+          // Repin axle exactly trailerL behind kingpin
+          state.rearAxleX = hx - trailerL * Math.cos(state.trailerAngle);
+          state.rearAxleY = hy - trailerL * Math.sin(state.trailerAngle);
         }
-
-        // Re-pin axle exactly trailerL behind kingpin along trailer axis
-        state.rearAxleX = hx - trailerL * Math.cos(state.trailerAngle);
-        state.rearAxleY = hy - trailerL * Math.sin(state.trailerAngle);
 
         // Trailer centre
         const kingpinToCenter = trailer.length / 2 - trailer.kingpinToFront;
@@ -1356,39 +1357,69 @@
         ctx.translate(state.trailerX, state.trailerY);
         ctx.rotate(state.trailerAngle);
 
-        ctx.fillStyle = "#aaa";
-        ctx.fillRect(-trailer.length / 2, -trailer.width / 2, trailer.length, trailer.width);
+        const hl  = trailer.length / 2;
+        const hw  = trailer.width  / 2;
 
-        // Tandem axles — position driven by axleOffset (kingpin → axle distance)
-        // In trailer local space, kingpin is at +trailer.kingpinToFront from front edge
-        // Front edge is at -trailer.length/2 in local space
-        // So kingpin local X = -trailer.length/2 + trailer.kingpinToFront
-        const kingpinLocalX = -trailer.length / 2 + trailer.kingpinToFront;
-        // Rear axle group centre = kingpin - axleOffset (going rearward = more negative)
-        const axleCentreX   = kingpinLocalX - state.axleOffset + trailer.length;
-        // Two axles spread 20 units apart around the centre
-        const axle1X = axleCentreX + 10;
-        const axle2X = axleCentreX - 10;
+        const tireW   = 14;
+        const tireH   = 3;
+        const dualGap = 2;
 
-        // Each tire is a small rectangle flanking the trailer body on left and right.
-        // tireW = fore-aft footprint (along X), tireH = how far it sticks out (along Y).
-        const tireW    = 14;  // fore-aft length of tire
-        const tireH    = 1.5;   // outboard thickness of each tire
-        const dualGap  = 2;   // gap between inner and outer tire of dual pair
-        const sideEdge = trailer.width / 2; // trailer body edge
+        // --- Tandem axles drawn FIRST so body covers inner tires ---
+        const slideOffset = state.tandemMode === "city" ? 60 : 0;
+        const axleCentreX = -hl + 54 + slideOffset;
+        const axleSpread  = 12;
 
-        ctx.fillStyle = "#111";
-        for (const axleX of [axle1X, axle2X]) {
-          const tx = axleX - tireW / 2;
+        for (const axX of [axleCentreX + axleSpread, axleCentreX - axleSpread]) {
+          const tx = axX - tireW / 2;
 
-          // Left side (negative Y): inner tire flush to body, outer tire beyond it
-          ctx.fillRect(tx, -(sideEdge + tireH),              tireW, tireH); // inner
-          ctx.fillRect(tx, -(sideEdge + tireH * 2 + dualGap), tireW, tireH); // outer
+          // Axle bar
+          ctx.fillStyle = "#333";
+          ctx.fillRect(axX - 2, -(hw + tireH), 4, trailer.width + tireH * 2);
 
-          // Right side (positive Y): inner tire flush to body, outer tire beyond it
-          ctx.fillRect(tx,  sideEdge,                         tireW, tireH); // inner
-          ctx.fillRect(tx,  sideEdge + tireH + dualGap,       tireW, tireH); // outer
+          // Tires — outer visible, inner will be covered by body
+          ctx.fillStyle = "#111";
+          ctx.fillRect(tx, -(hw + tireH), tireW, tireH);  // left outer
+          ctx.fillRect(tx, -hw,           tireW, tireH);  // left inner (covered by body)
+          ctx.fillRect(tx,  hw - tireH,   tireW, tireH);  // right inner (covered by body)
+          ctx.fillRect(tx,  hw,           tireW, tireH);  // right outer
         }
+
+        // --- Main body drawn AFTER axles so it covers inner tires ---
+        ctx.fillStyle = "#b0b0b0";
+        ctx.fillRect(-hl, -hw, trailer.length, trailer.width);
+
+        // Side rails
+        ctx.fillStyle = "#888";
+        ctx.fillRect(-hl, -hw,     trailer.length, 4);
+        ctx.fillRect(-hl,  hw - 4, trailer.length, 4);
+
+        // Vertical panel seams
+        ctx.strokeStyle = "#999";
+        ctx.lineWidth = 1;
+        for (let px = -hl + 40; px < hl - 10; px += 60) {
+          ctx.beginPath(); ctx.moveTo(px, -hw + 4); ctx.lineTo(px, hw - 4); ctx.stroke();
+        }
+
+        // Nose plate
+        ctx.fillStyle = "#777";
+        ctx.fillRect(hl - 14, -hw, 14, trailer.width);
+        ctx.fillStyle = "#555";
+        ctx.beginPath(); ctx.ellipse(hl - 4, 0, 8, 6, 0, 0, Math.PI * 2); ctx.fill();
+
+        // Rear bumper bar
+        ctx.fillStyle = "#555";
+        ctx.fillRect(-hl, -hw, 6, trailer.width);
+        ctx.fillStyle = "#f00";
+        ctx.fillRect(-hl, -hw + 3,  6, 7);
+        ctx.fillRect(-hl,  hw - 10, 6, 7);
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(-hl, -hw + 12, 6, 5);
+        ctx.fillRect(-hl,  hw - 17, 6, 5);
+
+        // Landing gear
+        ctx.fillStyle = "#666";
+        ctx.fillRect(hl - 40, -hw - 4, 6, 4);
+        ctx.fillRect(hl - 40,  hw,     6, 4);
 
         ctx.restore();
       }
@@ -1491,39 +1522,38 @@
         ctx.beginPath(); ctx.arc(cabRear + 4, -hw - 1, 2, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.arc(cabRear + 4,  hw + 1, 2, 0, Math.PI * 2); ctx.fill();
 
-        // --- Drive axle dual tires (slightly outside cab width) ---
+        // --- Drive axle dual tires ---
         const driveAxleX = rear + 4;
-        const tireW = 14, tireH = 3, dualGap = 1;
-        const tireOut = 2; // how far past cab edge
-        ctx.fillStyle = "#111";
-        // Left side
-        ctx.fillRect(driveAxleX - tireW / 2, -hw - tireH * 2 - dualGap - tireOut, tireW, tireH);
-        ctx.fillRect(driveAxleX - tireW / 2, -hw - tireH - tireOut,                tireW, tireH);
-        // Right side
-        ctx.fillRect(driveAxleX - tireW / 2,  hw + tireOut,                        tireW, tireH);
-        ctx.fillRect(driveAxleX - tireW / 2,  hw + tireH + dualGap + tireOut,      tireW, tireH);
-        // Axle bar
+        const tireW = 14, tireH = 3, dualGap = 2;
+        // Axle bar drawn first so tires appear on top
         ctx.fillStyle = "#333";
-        ctx.fillRect(driveAxleX - 2, -hw, 4, hw * 2);
+        ctx.fillRect(driveAxleX - 2, -hw - tireH, 4, hw * 2 + tireH * 2);
+        ctx.fillStyle = "#111";
+        // Left side — outer past edge, inner at edge
+        ctx.fillRect(driveAxleX - tireW / 2, -hw - tireH, tireW, tireH); // outer
+        ctx.fillRect(driveAxleX - tireW / 2, -hw,         tireW, tireH); // inner
+        // Right side — inner at edge, outer past edge
+        ctx.fillRect(driveAxleX - tireW / 2,  hw - tireH, tireW, tireH); // inner
+        ctx.fillRect(driveAxleX - tireW / 2,  hw,         tireW, tireH); // outer
 
         // --- Steer axle — axle bar is fixed, only tires rotate ---
         const frontAxleX = -truck.hitchToRear + truck.wheelbase;
 
-        // Fixed axle bar
+        // Fixed axle bar drawn first
         ctx.fillStyle = "#333";
-        ctx.fillRect(frontAxleX - 2, -hw, 4, hw * 2);
+        ctx.fillRect(frontAxleX - 2, -hw - tireH, 4, hw * 2 + tireH * 2);
 
-        // Left tire — rotates around its own pivot at (frontAxleX, -hw)
+        // Left tire — pivots at body edge, single tire (steer axle)
         ctx.save();
-        ctx.translate(frontAxleX, -hw - tireOut);
+        ctx.translate(frontAxleX, -hw);
         ctx.rotate(state.steerAngle);
         ctx.fillStyle = "#111";
         ctx.fillRect(-tireW / 2, -tireH, tireW, tireH);
         ctx.restore();
 
-        // Right tire — rotates around its own pivot at (frontAxleX, hw)
+        // Right tire — symmetric
         ctx.save();
-        ctx.translate(frontAxleX, hw + tireOut);
+        ctx.translate(frontAxleX, hw);
         ctx.rotate(state.steerAngle);
         ctx.fillStyle = "#111";
         ctx.fillRect(-tireW / 2, 0, tireW, tireH);
