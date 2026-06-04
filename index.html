@@ -22,6 +22,22 @@
 
     <!-- General SEO / share -->
     <meta name="description" content="Practice backing a 53ft trailer to loading docks" />
+
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+    <script>
+      firebase.initializeApp({
+        apiKey:            "AIzaSyAIw8iBWgih5TRSOhzoRIi1KbgxhNV6AAM",
+        authDomain:        "trucksim-a6959.firebaseapp.com",
+        databaseURL:       "https://trucksim-a6959-default-rtdb.firebaseio.com",
+        projectId:         "trucksim-a6959",
+        storageBucket:     "trucksim-a6959.firebasestorage.app",
+        messagingSenderId: "37893830673",
+        appId:             "1:37893830673:web:682413cbaf86dccf9399b0"
+      });
+      var fbScoresRef = firebase.database().ref("leaderboard");
+    </script>
     <style>
       html, body {
         margin: 0;
@@ -2274,8 +2290,10 @@
       }
 
       /* =====================================
-         LEADERBOARD (localStorage)
+         LEADERBOARD (Firebase)
       ===================================== */
+      const scoresRef = fbScoresRef;
+
       const lbOverlay  = document.getElementById("leaderboard-overlay");
       const lbBody     = document.getElementById("lb-body");
       const nameInput  = document.getElementById("name-input");
@@ -2283,26 +2301,13 @@
       const closeLbBtn = document.getElementById("close-lb-btn");
       const lbBtn      = document.getElementById("lb-btn");
 
-      let lbEntries = [];
-
-      function loadEntries() {
-        try { return JSON.parse(localStorage.getItem("truckSim_lb") || "[]"); }
-        catch(e) { return []; }
-      }
-
-      function saveEntries(entries) {
-        try { localStorage.setItem("truckSim_lb", JSON.stringify(entries)); }
-        catch(e) {}
-      }
-
-      function renderLeaderboard() {
+      function renderLeaderboard(entries) {
         lbBody.innerHTML = "";
-        const sorted = [...lbEntries].sort((a, b) => b.score - a.score).slice(0, 10);
-        if (sorted.length === 0) {
+        if (!entries || entries.length === 0) {
           lbBody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#666;padding:12px">No entries yet — be the first!</td></tr>`;
           return;
         }
-        sorted.forEach((e, i) => {
+        entries.forEach((e, i) => {
           const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}`;
           const tr = document.createElement("tr");
           tr.innerHTML = `<td style="text-align:center">${medal}</td><td>${e.name}</td><td style="text-align:right">${Number(e.score).toFixed(1)}</td><td style="text-align:right;color:#888">${e.date}</td>`;
@@ -2310,25 +2315,49 @@
         });
       }
 
-      function openLeaderboard() {
-        lbEntries = loadEntries();
-        renderLeaderboard();
-        const lastName = localStorage.getItem("truckSim_name") || "";
-        if (lastName) nameInput.value = lastName;
-        lbOverlay.classList.add("show");
+      async function fetchLeaderboard() {
+        lbBody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#666;padding:12px">Loading...</td></tr>`;
+        try {
+          const snap    = await scoresRef.orderByChild("score").limitToLast(10).once("value");
+          const raw     = snap.val() || {};
+          const entries = Object.values(raw).sort((a, b) => b.score - a.score);
+          renderLeaderboard(entries);
+        } catch(e) {
+          lbBody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#e44;padding:12px">Failed to load — check connection</td></tr>`;
+          console.warn("Leaderboard error:", e);
+        }
       }
 
-      saveBtn.addEventListener("click", () => {
+      function openLeaderboard() {
+        lbOverlay.classList.add("show");
+        fetchLeaderboard();
+        const lastName = localStorage.getItem("truckSim_name") || "";
+        if (lastName) nameInput.value = lastName;
+      }
+
+      saveBtn.addEventListener("click", async () => {
         const name  = nameInput.value.trim() || "Anonymous";
         const score = state.score;
         const date  = new Date().toLocaleDateString();
         try { localStorage.setItem("truckSim_name", name); } catch(e) {}
-        lbEntries = loadEntries();
-        lbEntries.push({ name, score, date });
-        lbEntries.sort((a, b) => b.score - a.score);
-        lbEntries.splice(10);
-        saveEntries(lbEntries);
-        renderLeaderboard();
+        try {
+          // Fetch all entries, add new one, keep top 10
+          const snap    = await scoresRef.once("value");
+          const raw     = snap.val() || {};
+          let entries   = Object.entries(raw); // [[key, entry], ...]
+          entries.push([null, { name, score, date }]);
+          entries.sort((a, b) => b[1].score - a[1].score);
+          // Remove entries beyond top 10
+          const toDelete = entries.slice(10);
+          toDelete.forEach(([key]) => { if (key) scoresRef.child(key).remove(); });
+          // Push new entry if it makes top 10
+          if (entries.findIndex(([, e]) => e.name === name && e.score === score) < 10) {
+            await scoresRef.push({ name, score, date });
+          }
+          fetchLeaderboard();
+        } catch(e) {
+          console.warn("Save error:", e);
+        }
       });
 
       closeLbBtn.addEventListener("click", () => lbOverlay.classList.remove("show"));
