@@ -12,15 +12,19 @@ Works on iPhone, Android, and Windows. On iPhone, tap **Share → Add to Home Sc
 
 ## Features
 
-- Realistic articulated trailer physics with no-side-slip rear axles
+- Realistic articulated trailer physics
 - Two warehouses with multiple dock doors and scoring
 - Score grading system — Perfect, Great, Good, Fair, Poor
 - Tandem axle sliding (highway / city mode)
 - Pinch to zoom on mobile, scroll wheel on desktop
 - Side mirrors with real-time rear view
 - Organized truck yard with parked trailers and hazard cones
+- Asphalt yard with concrete dock apron
 - Collision and jackknife detection
 - Animated score and collision popups
+- Detailed truck cab and 53ft trailer visuals
+- Frame-rate independent physics (consistent on all devices)
+- Installable as a PWA on iOS and Android
 
 ## Controls
 
@@ -49,6 +53,14 @@ Works on iPhone, Android, and Windows. On iPhone, tap **Share → Add to Home Sc
 |R           |Reset          |
 |F           |Toggle Tandems |
 |Scroll Wheel|Zoom           |
+
+### Desktop (Mouse)
+
+|Input                |Action |
+|---------------------|-------|
+|Left Click Hold      |Forward|
+|Right Click Hold     |Reverse|
+|Move Mouse Left/Right|Steer  |
 
 ## Scoring
 
