@@ -267,7 +267,7 @@
     <div id="hud">
       <div id="statusLine"></div>
       <div id="scoreLine"></div>
-      <div id="keyLegend">W/S: Fwd/Rev &nbsp; A/D: Steer &nbsp; Q: Brake &nbsp; E: Center &nbsp; R: Reset &nbsp; F: Tandems</div>
+      <div id="keyLegend">W/S: Fwd/Rev &nbsp; A/D: Steer &nbsp; Q: Brake &nbsp; E: Center &nbsp; R: Reset &nbsp; F: Tandems &nbsp; | &nbsp; Mouse: LMB Fwd · RMB Rev · Move to Steer</div>
     </div>
 
     <div id="popup">
@@ -346,7 +346,7 @@
       const limits = {
         maxSteer: Math.PI / 4,
         accel: 0.6,
-        friction: 0.08,
+        friction: 0.15,
         maxSpeed: 65,
       };
 
@@ -623,6 +623,40 @@
         camera.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, camera.zoom * delta));
       }, { passive: false });
 
+      // Mouse steering — relative movement steers left/right
+      // Only active when mouse is over the canvas and not using keyboard steer
+      let lastMouseX = null;
+      canvas.addEventListener("mouseenter", () => { lastMouseX = null; });
+      canvas.addEventListener("mouseleave", () => {
+        lastMouseX = null;
+        keys.ArrowUp   = false;
+        keys.ArrowDown = false;
+      });
+      canvas.addEventListener("mousemove", (e) => {
+        if (keys.ArrowLeft || keys.ArrowRight) {
+          lastMouseX = null;
+          return;
+        }
+        if (lastMouseX === null) { lastMouseX = e.clientX; return; }
+        const dx = e.clientX - lastMouseX;
+        lastMouseX = e.clientX;
+        const sensitivity = 0.0012;
+        state.steerAngle += dx * sensitivity;
+        state.steerAngle = Math.max(-limits.maxSteer, Math.min(limits.maxSteer, state.steerAngle));
+      });
+
+      // LMB = forward, RMB = reverse
+      canvas.addEventListener("mousedown", (e) => {
+        if (e.button === 0) keys.ArrowUp   = true;
+        if (e.button === 2) keys.ArrowDown = true;
+      });
+      canvas.addEventListener("mouseup", (e) => {
+        if (e.button === 0) keys.ArrowUp   = false;
+        if (e.button === 2) keys.ArrowDown = false;
+      });
+      // Prevent right-click context menu on canvas
+      canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+
       let lastPinchDist = null;
 
       canvas.addEventListener("touchmove", (e) => {
@@ -842,7 +876,7 @@
 
         // Throttle / brake
         if (keys.ArrowUp)   state.speed += limits.accel * dtScale;
-        if (keys.ArrowDown) state.speed -= limits.accel * dtScale;
+        if (keys.ArrowDown) state.speed -= (limits.accel * 0.5) * dtScale;
         if (keys.Space)     applyBrake();
 
         // Coast friction
@@ -851,7 +885,7 @@
           else if (state.speed < 0) state.speed = Math.min(0, state.speed + limits.friction * dtScale);
         }
 
-        state.speed = Math.max(-limits.maxSpeed, Math.min(limits.maxSpeed, state.speed));
+        state.speed = Math.max(-(limits.maxSpeed * 0.5), Math.min(limits.maxSpeed, state.speed));
         const v = state.speed;
 
         if (Math.abs(v) < 0.001) {
