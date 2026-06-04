@@ -2276,53 +2276,87 @@
       /* =====================================
          LEADERBOARD
       ===================================== */
-      const lbOverlay   = document.getElementById("leaderboard-overlay");
-      const lbBody      = document.getElementById("lb-body");
-      const nameInput   = document.getElementById("name-input");
-      const saveBtn     = document.getElementById("save-score-btn");
-      const closeLbBtn  = document.getElementById("close-lb-btn");
-      const lbBtn       = document.getElementById("lb-btn");
+      const LB_BIN_ID  = "6a21adddf5f4af5e29b9400c";
+      const LB_API_KEY = "$2a$10$OMGkaEzP9g54Nv/pOu7L..fq/NWm1TBKGTMLn6pzEmbIn1M6AUL4y";
+      const LB_URL     = `https://api.jsonbin.io/v3/b/${LB_BIN_ID}`;
 
-      function loadLeaderboard() {
-        try { return JSON.parse(localStorage.getItem("truckSim_lb") || "[]"); }
-        catch(e) { return []; }
-      }
+      const lbOverlay  = document.getElementById("leaderboard-overlay");
+      const lbBody     = document.getElementById("lb-body");
+      const nameInput  = document.getElementById("name-input");
+      const saveBtn    = document.getElementById("save-score-btn");
+      const closeLbBtn = document.getElementById("close-lb-btn");
+      const lbBtn      = document.getElementById("lb-btn");
 
-      function saveLeaderboard(entries) {
-        try { localStorage.setItem("truckSim_lb", JSON.stringify(entries)); }
-        catch(e) {}
-      }
+      let lbEntries = [];
 
       function renderLeaderboard() {
-        const entries = loadLeaderboard();
         lbBody.innerHTML = "";
-        if (entries.length === 0) {
+        if (lbEntries.length === 0) {
           lbBody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#666;padding:12px">No entries yet</td></tr>`;
           return;
         }
-        entries.forEach((e, i) => {
+        lbEntries.forEach((e, i) => {
           const tr = document.createElement("tr");
           tr.innerHTML = `<td>${i + 1}</td><td>${e.name}</td><td>${e.score.toFixed(1)}</td><td>${e.date}</td>`;
           lbBody.appendChild(tr);
         });
       }
 
-      function openLeaderboard() {
-        renderLeaderboard();
-        const entries = loadLeaderboard();
-        if (entries.length > 0) nameInput.value = entries[0].name;
-        lbOverlay.classList.add("show");
+      async function fetchLeaderboard() {
+        lbBody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#666;padding:12px">Loading...</td></tr>`;
+        try {
+          const res  = await fetch(LB_URL + "/latest", {
+            headers: { "X-Master-Key": LB_API_KEY }
+          });
+          const data = await res.json();
+          lbEntries  = data.record.scores || [];
+          renderLeaderboard();
+        } catch(e) {
+          lbBody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#e44;padding:12px">Failed to load</td></tr>`;
+        }
       }
 
-      saveBtn.addEventListener("click", () => {
+      async function pushLeaderboard() {
+        try {
+          await fetch(LB_URL, {
+            method:  "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Master-Key": LB_API_KEY,
+            },
+            body: JSON.stringify({ scores: lbEntries }),
+          });
+        } catch(e) {
+          console.warn("Failed to save leaderboard:", e);
+        }
+      }
+
+      function openLeaderboard() {
+        lbOverlay.classList.add("show");
+        fetchLeaderboard();
+        // Pre-fill last used name from localStorage
+        const lastName = localStorage.getItem("truckSim_name") || "";
+        if (lastName) nameInput.value = lastName;
+      }
+
+      saveBtn.addEventListener("click", async () => {
         const name  = nameInput.value.trim() || "Anonymous";
         const score = state.score;
         const date  = new Date().toLocaleDateString();
-        const entries = loadLeaderboard();
-        entries.push({ name, score, date });
-        entries.sort((a, b) => b.score - a.score);
-        entries.splice(10);
-        saveLeaderboard(entries);
+        // Save name for next time
+        try { localStorage.setItem("truckSim_name", name); } catch(e) {}
+        // Re-fetch first to get latest
+        try {
+          const res  = await fetch(LB_URL + "/latest", {
+            headers: { "X-Master-Key": LB_API_KEY }
+          });
+          const data = await res.json();
+          lbEntries  = data.record.scores || [];
+        } catch(e) {}
+        lbEntries.push({ name, score, date });
+        lbEntries.sort((a, b) => b.score - a.score);
+        lbEntries.splice(10);
+        await pushLeaderboard();
         renderLeaderboard();
       });
 
