@@ -541,6 +541,9 @@
 
       const obstacles = [];
 
+      // Detect touch device for platform-specific physics
+      const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
       /* =====================================
          OBSTACLE GENERATION
       ===================================== */
@@ -1017,17 +1020,26 @@
         }
 
         // Normalise dt to 60fps so physics feel the same on all devices
-        const dtScale = dt * 60;
+        const dtScale   = dt * 60;
+        const isDesktop = !isTouchDevice;
+
+        // Desktop gets slightly slower steering and acceleration, faster braking
+        const steerRate  = isDesktop ? 0.022 : 0.03;
+        const accelRate  = isDesktop ? limits.accel * 0.75 : limits.accel;
+        const brakeRate  = isDesktop ? 0.78 : 0.85;
 
         // Steering
-        if (keys.ArrowLeft)  state.steerAngle -= 0.03 * dtScale;
-        if (keys.ArrowRight) state.steerAngle += 0.03 * dtScale;
+        if (keys.ArrowLeft)  state.steerAngle -= steerRate * dtScale;
+        if (keys.ArrowRight) state.steerAngle += steerRate * dtScale;
         state.steerAngle = Math.max(-limits.maxSteer, Math.min(limits.maxSteer, state.steerAngle));
 
         // Throttle / brake
-        if (keys.ArrowUp)   state.speed += limits.accel * dtScale;
-        if (keys.ArrowDown) state.speed -= (limits.accel * 0.5) * dtScale;
-        if (keys.Space)     applyBrake();
+        if (keys.ArrowUp)   state.speed += accelRate * dtScale;
+        if (keys.ArrowDown) state.speed -= (accelRate * 0.5) * dtScale;
+        if (keys.Space) {
+          state.speed *= brakeRate;
+          if (Math.abs(state.speed) < 0.05) state.speed = 0;
+        }
 
         // Coast friction
         if (!keys.ArrowUp && !keys.ArrowDown) {
@@ -1160,7 +1172,7 @@
             if (state.lastDockScore !== null) {
               state.speed = 0;
               if (!state.docked) {
-                state.score += state.lastDockScore;
+                state.score = Math.round((state.score + state.lastDockScore) * 10) / 10;
                 state.docked = true;
               }
               return;
@@ -1799,15 +1811,15 @@
           const g = state.lastDockGrade;
           showPopup(
             `${gradeEmojis[g]} ${g.toUpperCase()}`,
-            `Dock ${state.lastDockDoor}  •  ${state.lastDockScore}/100\nTotal: ${state.score}`,
+            `Dock ${state.lastDockDoor}  •  ${state.lastDockScore.toFixed(1)}/100\nTotal: ${state.score.toFixed(1)}`,
             gradeColors[g],
             3000
           );
         }
 
         scoreLine.textContent = state.lastDockScore != null
-          ? `Dock ${state.lastDockDoor}: ${state.lastDockScore}/100 — ${state.lastDockGrade} | Total: ${state.score}`
-          : `Total Score: ${state.score}`;
+          ? `Dock ${state.lastDockDoor}: ${state.lastDockScore.toFixed(1)}/100 — ${state.lastDockGrade} | Total: ${state.score.toFixed(1)}`
+          : `Total Score: ${state.score.toFixed(1)}`;
       }
 
       /* =====================================
