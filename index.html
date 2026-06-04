@@ -246,6 +246,96 @@
         letter-spacing: 1px;
         text-transform: uppercase;
       }
+
+      /* Leaderboard overlay */
+      #leaderboard-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.85);
+        z-index: 200;
+        align-items: center;
+        justify-content: center;
+      }
+      #leaderboard-overlay.show { display: flex; }
+      #leaderboard-box {
+        background: #1a1a1a;
+        border: 2px solid #555;
+        border-radius: 16px;
+        padding: 24px 28px;
+        width: min(420px, 90vw);
+        color: #eee;
+        font-family: sans-serif;
+      }
+      #leaderboard-box h2 {
+        margin: 0 0 16px;
+        font-size: 20px;
+        text-align: center;
+        color: #ff0;
+      }
+      #leaderboard-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+        margin-bottom: 16px;
+      }
+      #leaderboard-table th {
+        text-align: left;
+        color: #888;
+        font-weight: normal;
+        padding: 4px 6px;
+        border-bottom: 1px solid #333;
+      }
+      #leaderboard-table td {
+        padding: 6px 6px;
+        border-bottom: 1px solid #222;
+      }
+      #leaderboard-table tr:first-child td { color: #ffd700; }
+      #leaderboard-table tr:nth-child(2) td { color: #c0c0c0; }
+      #leaderboard-table tr:nth-child(3) td { color: #cd7f32; }
+      #name-entry {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      #name-input {
+        flex: 1;
+        background: #333;
+        border: 1px solid #555;
+        border-radius: 8px;
+        color: #eee;
+        padding: 8px 12px;
+        font-size: 15px;
+        outline: none;
+      }
+      #name-input:focus { border-color: #ff0; }
+      #save-score-btn, #close-lb-btn {
+        background: #444;
+        border: 1px solid #666;
+        border-radius: 8px;
+        color: #eee;
+        padding: 8px 14px;
+        font-size: 14px;
+        cursor: pointer;
+      }
+      #save-score-btn { background: #2a6; border-color: #3b7; }
+      #save-score-btn:hover { background: #3b7; }
+      #close-lb-btn:hover { background: #555; }
+      #lb-btn {
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        background: rgba(0,0,0,0.5);
+        border: 1px solid #555;
+        border-radius: 8px;
+        color: #eee;
+        padding: 5px 10px;
+        font-size: 12px;
+        cursor: pointer;
+        z-index: 50;
+        pointer-events: all;
+      }
+      #lb-btn:hover { background: rgba(255,255,255,0.1); }
     </style>
   </head>
   <body>
@@ -286,6 +376,32 @@
     <div id="popup">
       <div id="popupTitle"></div>
       <div id="popupBody"></div>
+    </div>
+
+    <button id="lb-btn">🏆 Leaderboard</button>
+
+    <div id="leaderboard-overlay">
+      <div id="leaderboard-box">
+        <h2>🏆 Leaderboard</h2>
+        <table id="leaderboard-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>Score</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody id="lb-body"></tbody>
+        </table>
+        <div id="name-entry">
+          <input id="name-input" type="text" maxlength="20" placeholder="Enter your name..." />
+          <button id="save-score-btn">Save</button>
+        </div>
+        <div style="text-align:center">
+          <button id="close-lb-btn">Close</button>
+        </div>
+      </div>
     </div>
 
     <script>
@@ -385,6 +501,8 @@
         axleOffset: TANDEM_BACK,
         collision: false,
         jackknife: false,
+        jacknifeWarning: false,
+        jacknifeBeep: false,
         lastDockDoor: null,
         lastDockScore: null,
         lastDockGrade: null,
@@ -820,6 +938,7 @@
          RESET
       ===================================== */
       function reset() {
+        if (typeof resetSounds === "function") resetSounds();
         resize();
         _lastCollision = false;
         _lastJackknife = false;
@@ -840,6 +959,8 @@
         state.steerAngle       = 0;
         state.speed            = 0;
         state.jackknife        = false;
+        state.jacknifeWarning  = false;
+        state.jacknifeBeep     = false;
         state.collision        = false;
         state.lastDockDoor     = null;
         state.lastDockScore    = null;
@@ -942,7 +1063,17 @@
 
         // Jackknife detection
         const diff = ((state.heading - state.trailerAngle + Math.PI) % (2 * Math.PI)) - Math.PI;
-        if (Math.abs(diff) > 1.9) state.jackknife = true;
+        if (Math.abs(diff) > 1.9) {
+          state.jackknife        = true;
+          state.jacknifeWarning  = false;
+          state.jacknifeBeep     = false;
+        } else if (Math.abs(diff) > 1.4) {
+          state.jacknifeWarning  = true;
+          state.jacknifeBeep     = true;
+        } else {
+          state.jacknifeBeep     = false;
+          state.jacknifeWarning  = false;
+        }
 
         checkCollisions();
       }
@@ -1112,7 +1243,7 @@
               // 0 rad = perfectly straight (20pts), 0.2 rad (~11°) = 0 pts
               const alignScore = Math.max(0, 20 * (1 - jackAngle / 0.35));
 
-              const score = Math.round(offsetScore + angleScore + alignScore);
+              const score = Math.round((offsetScore + angleScore + alignScore) * 10) / 10;
 
               // Grade label
               let grade;
@@ -1620,6 +1751,8 @@
         } else if (state.jackknife) {
           statusLine.textContent = "⚠️ Jackknifed! Reset to try again.";
           if (!_lastJackknife) showPopup("⚠️ JACKKNIFED!", "Hit Reset to continue", "jackknife", 3000);
+        } else if (state.jacknifeWarning) {
+          statusLine.textContent = "⚠️ Warning — Jackknife risk! Straighten up!";
         } else {
           const speedStr = state.speed.toFixed(2);
           const steerDeg = ((state.steerAngle * 180) / Math.PI).toFixed(0);
@@ -1631,6 +1764,8 @@
 
         if (state.lastDockScore !== null && state.lastDockScore !== _lastDockScore) {
           _lastDockScore = state.lastDockScore;
+          playDock();
+          playScoreChime(state.lastDockGrade);
           const gradeColors = {
             "Perfect!": "score-perfect",
             "Great":    "score-great",
@@ -1779,6 +1914,321 @@
       }
 
       /* =====================================
+         AUDIO SYSTEM
+      ===================================== */
+      let audioCtx = null;
+      let engineGain = null, engineOsc = null, engineOsc2 = null;
+      let idleGain = null;
+      let audioUnlocked = false;
+
+      // Sound state — declared here so reset() can safely reference them
+      let _soundCollision  = false;
+      let _soundJackknife  = false;
+      let _soundJacknifeWarn = false;
+      let _soundDocked     = false;
+      let _wasReversing    = false;
+      let _prevBrakeKey    = false;
+      let _reverseBeepTimer = null;
+
+      function initAudio() {
+        if (audioCtx) return;
+        try {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+          // Master gain
+          const master = audioCtx.createGain();
+          master.gain.value = 0.4;
+          master.connect(audioCtx.destination);
+
+          // --- Engine oscillator (main growl) ---
+          engineOsc = audioCtx.createOscillator();
+          engineOsc.type = "sawtooth";
+          engineOsc.frequency.value = 60;
+
+          engineOsc2 = audioCtx.createOscillator();
+          engineOsc2.type = "square";
+          engineOsc2.frequency.value = 62;
+
+          // Low pass filter
+          const engFilter = audioCtx.createBiquadFilter();
+          engFilter.type = "lowpass";
+          engFilter.frequency.value = 400;
+          engFilter.Q.value = 1.5;
+
+          engineGain = audioCtx.createGain();
+          engineGain.gain.value = 0;
+
+          engineOsc.connect(engFilter);
+          engineOsc2.connect(engFilter);
+          engFilter.connect(engineGain);
+          engineGain.connect(master);
+
+          engineOsc.start();
+          engineOsc2.start();
+
+          // --- Idle rumble ---
+          const bufSize = Math.min(audioCtx.sampleRate, 44100); // cap at 44100 samples
+          const noiseBuffer = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+          const data = noiseBuffer.getChannelData(0);
+          for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+
+          const noiseSource = audioCtx.createBufferSource();
+          noiseSource.buffer = noiseBuffer;
+          noiseSource.loop = true;
+
+          const idleFilter = audioCtx.createBiquadFilter();
+          idleFilter.type = "bandpass";
+          idleFilter.frequency.value = 55;
+          idleFilter.Q.value = 0.8;
+
+          idleGain = audioCtx.createGain();
+          idleGain.gain.value = 0;
+
+          noiseSource.connect(idleFilter);
+          idleFilter.connect(idleGain);
+          idleGain.connect(master);
+          noiseSource.start();
+
+          audioUnlocked = true;
+        } catch (e) {
+          console.warn("Audio init failed:", e);
+        }
+      }
+
+      // Unlock audio on first interaction (iOS requirement)
+      function unlockAudio() {
+        if (audioUnlocked) return;
+        initAudio();
+        if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+      }
+      document.addEventListener("touchstart", unlockAudio, { once: true });
+      document.addEventListener("mousedown",  unlockAudio, { once: true });
+      document.addEventListener("keydown",    unlockAudio, { once: true });
+
+      // Update engine sound each frame
+      function updateEngineSound(speed, isReverse) {
+        if (!audioCtx || !audioUnlocked) return;
+        if (audioCtx.state === "suspended") audioCtx.resume();
+
+        const absSpeed   = Math.abs(speed);
+        const t          = audioCtx.currentTime;
+        const throttling = keys.ArrowUp || keys.ArrowDown;
+
+        // Freq: idle ~55Hz, rises to ~140Hz at full speed
+        const baseFreq   = isReverse ? 50 : 60;
+        const targetFreq = baseFreq + (absSpeed / limits.maxSpeed) * 80;
+        const freqConst  = throttling ? 0.1 : 0.04;
+        engineOsc.frequency.setTargetAtTime(targetFreq, t, freqConst);
+        engineOsc2.frequency.setTargetAtTime(targetFreq * 1.03, t, freqConst);
+
+        // Volume: drops fast on throttle release, builds when throttling
+        const targetVol = absSpeed < 0.5 ? 0.05
+                        : throttling     ? 0.35 + (absSpeed / limits.maxSpeed) * 0.3
+                        :                  0.05 + (absSpeed / limits.maxSpeed) * 0.08;
+        const timeConst = throttling ? 0.15 : 0.05;
+        engineGain.gain.setTargetAtTime(targetVol, t, timeConst);
+
+        // Idle rumble
+        idleGain.gain.setTargetAtTime(0.12, t, 0.3);
+      }
+
+      // Air brake hiss
+      function playBrake() {
+        if (!audioCtx || !audioUnlocked) return;
+        try {
+          const t = audioCtx.currentTime;
+          const bufSize = Math.floor(audioCtx.sampleRate * 0.4);
+          const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+          const d = buf.getChannelData(0);
+          for (let i = 0; i < bufSize; i++) d[i] = Math.random() * 2 - 1;
+          const src = audioCtx.createBufferSource();
+          src.buffer = buf;
+          const filt = audioCtx.createBiquadFilter();
+          filt.type = "highpass";
+          filt.frequency.value = 2000;
+          const g = audioCtx.createGain();
+          g.gain.setValueAtTime(0.3, t);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+          src.connect(filt); filt.connect(g); g.connect(audioCtx.destination);
+          src.start(t); src.stop(t + 0.4);
+        } catch(e) {}
+      }
+
+      function playCollision() {
+        if (!audioCtx || !audioUnlocked) return;
+        try {
+          const t = audioCtx.currentTime;
+          const osc = audioCtx.createOscillator();
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(120, t);
+          osc.frequency.exponentialRampToValueAtTime(30, t + 0.3);
+          const g = audioCtx.createGain();
+          g.gain.setValueAtTime(0.8, t);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+          osc.connect(g); g.connect(audioCtx.destination);
+          osc.start(t); osc.stop(t + 0.4);
+          const bufSize = Math.floor(audioCtx.sampleRate * 0.3);
+          const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+          const d = buf.getChannelData(0);
+          for (let i = 0; i < bufSize; i++) d[i] = Math.random() * 2 - 1;
+          const src = audioCtx.createBufferSource();
+          src.buffer = buf;
+          const filt = audioCtx.createBiquadFilter();
+          filt.type = "bandpass"; filt.frequency.value = 300;
+          const ng = audioCtx.createGain();
+          ng.gain.setValueAtTime(0.5, t);
+          ng.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+          src.connect(filt); filt.connect(ng); ng.connect(audioCtx.destination);
+          src.start(t); src.stop(t + 0.3);
+        } catch(e) {}
+      }
+
+      function playJackknife() {
+        if (!audioCtx || !audioUnlocked) return;
+        try {
+          const t = audioCtx.currentTime;
+          for (let i = 0; i < 3; i++) {
+            const osc = audioCtx.createOscillator();
+            osc.type = "square";
+            osc.frequency.value = 880;
+            const g = audioCtx.createGain();
+            g.gain.setValueAtTime(0, t + i * 0.18);
+            g.gain.linearRampToValueAtTime(0.3, t + i * 0.18 + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.18 + 0.14);
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.start(t + i * 0.18);
+            osc.stop(t + i * 0.18 + 0.15);
+          }
+        } catch(e) {}
+      }
+
+      function playDock() {
+        if (!audioCtx || !audioUnlocked) return;
+        try {
+          const t = audioCtx.currentTime;
+          const osc = audioCtx.createOscillator();
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(80, t);
+          osc.frequency.exponentialRampToValueAtTime(40, t + 0.25);
+          const g = audioCtx.createGain();
+          g.gain.setValueAtTime(0.6, t);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+          osc.connect(g); g.connect(audioCtx.destination);
+          osc.start(t); osc.stop(t + 0.3);
+        } catch(e) {}
+      }
+
+      // Score chime — different tone per grade
+      function playScoreChime(grade) {
+        if (!audioCtx || !audioUnlocked) return;
+        try {
+          const t = audioCtx.currentTime;
+          const freqs = {
+            "Perfect!": [523, 659, 784, 1047],
+            "Great":    [494, 587, 740],
+            "Good":     [440, 554, 659],
+            "Fair":     [349, 440],
+            "Poor":     [294, 277],
+          };
+          const notes = freqs[grade] || freqs["Good"];
+          notes.forEach((freq, i) => {
+            const osc = audioCtx.createOscillator();
+            osc.type = "sine";
+            osc.frequency.value = freq;
+            const g = audioCtx.createGain();
+            g.gain.setValueAtTime(0, t + i * 0.1);
+            g.gain.linearRampToValueAtTime(0.25, t + i * 0.1 + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.1 + 0.3);
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.start(t + i * 0.1);
+            osc.stop(t + i * 0.1 + 0.35);
+          });
+        } catch(e) {}
+      }
+
+      // Reverse beep — plays while reversing
+      function updateReverseBeep(speed) {
+        const reversing = speed < -1;
+        if (reversing && !_wasReversing) {
+          // Start beeping
+          _reverseBeepTimer = setInterval(() => {
+            if (!audioCtx || !audioUnlocked) return;
+            const t = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            osc.type = "square";
+            osc.frequency.value = 1100;
+            const g = audioCtx.createGain();
+            g.gain.setValueAtTime(0.15, t);
+            g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.start(t); osc.stop(t + 0.1);
+          }, 600);
+        } else if (!reversing && _wasReversing) {
+          clearInterval(_reverseBeepTimer);
+          _reverseBeepTimer = null;
+        }
+        _wasReversing = reversing;
+      }
+
+      // Track sound trigger states
+
+      function updateSounds() {
+        if (!audioUnlocked) return;
+        const speed = state.speed;
+        const isReverse = speed < 0;
+        updateEngineSound(speed, isReverse);
+        updateReverseBeep(speed);
+
+        // Brake hiss — on fresh press only
+        if (keys.Space && !_prevBrakeKey && Math.abs(speed) > 2) playBrake();
+        _prevBrakeKey = keys.Space;
+
+        // Collision — once per collision
+        if (state.collision && !_soundCollision) { playCollision(); _soundCollision = true; }
+        if (!state.collision) _soundCollision = false;
+
+        // Jackknife — once per jackknife
+        if (state.jackknife && !_soundJackknife) { playJackknife(); _soundJackknife = true; }
+        if (!state.jackknife) _soundJackknife = false;
+
+        // Warning beep — single beep when approaching jackknife
+        if (state.jacknifeBeep && !state.jackknife && !_soundJacknifeWarn) {
+          playJacknifeWarn(); _soundJacknifeWarn = true;
+        }
+        if (!state.jacknifeBeep) _soundJacknifeWarn = false;
+
+        // Dock — once per docking
+        if (state.docked && !_soundDocked) { playDock(); _soundDocked = true; }
+        if (!state.docked) _soundDocked = false;
+      }
+
+      // Reset sound states on game reset
+      function playJacknifeWarn() {
+        if (!audioCtx || !audioUnlocked) return;
+        try {
+          const t = audioCtx.currentTime;
+          const osc = audioCtx.createOscillator();
+          osc.type = "square";
+          osc.frequency.value = 660;
+          const g = audioCtx.createGain();
+          g.gain.setValueAtTime(0, t);
+          g.gain.linearRampToValueAtTime(0.25, t + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+          osc.connect(g); g.connect(audioCtx.destination);
+          osc.start(t); osc.stop(t + 0.2);
+        } catch(e) {}
+      }
+
+      function resetSounds() {
+        _soundCollision    = false;
+        _soundJackknife    = false;
+        _soundJacknifeWarn = false;
+        _soundDocked       = false;
+        _wasReversing      = false;
+        _wasReversing   = false;
+        if (_reverseBeepTimer) { clearInterval(_reverseBeepTimer); _reverseBeepTimer = null; }
+      }
+      /* =====================================
          MAIN LOOP
       ===================================== */
       let lastTime = performance.now();
@@ -1788,6 +2238,7 @@
         lastTime = ts;
 
         update(dt);
+        updateSounds();
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -1823,8 +2274,63 @@
       }
 
       /* =====================================
-         INIT
+         LEADERBOARD
       ===================================== */
+      const lbOverlay   = document.getElementById("leaderboard-overlay");
+      const lbBody      = document.getElementById("lb-body");
+      const nameInput   = document.getElementById("name-input");
+      const saveBtn     = document.getElementById("save-score-btn");
+      const closeLbBtn  = document.getElementById("close-lb-btn");
+      const lbBtn       = document.getElementById("lb-btn");
+
+      function loadLeaderboard() {
+        try { return JSON.parse(localStorage.getItem("truckSim_lb") || "[]"); }
+        catch(e) { return []; }
+      }
+
+      function saveLeaderboard(entries) {
+        try { localStorage.setItem("truckSim_lb", JSON.stringify(entries)); }
+        catch(e) {}
+      }
+
+      function renderLeaderboard() {
+        const entries = loadLeaderboard();
+        lbBody.innerHTML = "";
+        if (entries.length === 0) {
+          lbBody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#666;padding:12px">No entries yet</td></tr>`;
+          return;
+        }
+        entries.forEach((e, i) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td>${i + 1}</td><td>${e.name}</td><td>${e.score.toFixed(1)}</td><td>${e.date}</td>`;
+          lbBody.appendChild(tr);
+        });
+      }
+
+      function openLeaderboard() {
+        renderLeaderboard();
+        const entries = loadLeaderboard();
+        if (entries.length > 0) nameInput.value = entries[0].name;
+        lbOverlay.classList.add("show");
+      }
+
+      saveBtn.addEventListener("click", () => {
+        const name  = nameInput.value.trim() || "Anonymous";
+        const score = state.score;
+        const date  = new Date().toLocaleDateString();
+        const entries = loadLeaderboard();
+        entries.push({ name, score, date });
+        entries.sort((a, b) => b.score - a.score);
+        entries.splice(10);
+        saveLeaderboard(entries);
+        renderLeaderboard();
+      });
+
+      closeLbBtn.addEventListener("click", () => lbOverlay.classList.remove("show"));
+      lbBtn.addEventListener("click", openLeaderboard);
+      lbOverlay.addEventListener("touchstart", (e) => e.stopPropagation());
+      nameInput.addEventListener("keydown", (e) => e.stopPropagation());
+
       reset();
       camera.x = state.x;
       camera.y = state.y;
