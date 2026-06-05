@@ -36,7 +36,6 @@
         messagingSenderId: "37893830673",
         appId:             "1:37893830673:web:682413cbaf86dccf9399b0"
       });
-      var fbScoresRef = firebase.database().ref("leaderboard");
     </script>
     <style>
       html, body {
@@ -405,6 +404,7 @@
               <th>#</th>
               <th>Name</th>
               <th>Score</th>
+              <th>Device</th>
               <th>Date</th>
             </tr>
           </thead>
@@ -2313,7 +2313,10 @@
       /* =====================================
          LEADERBOARD (Firebase)
       ===================================== */
-      const scoresRef = fbScoresRef;
+      function getScoresRef() {
+        try { return firebase.database().ref("leaderboard"); }
+        catch(e) { return null; }
+      }
 
       const lbOverlay  = document.getElementById("leaderboard-overlay");
       const lbBody     = document.getElementById("lb-body");
@@ -2325,26 +2328,29 @@
       function renderLeaderboard(entries) {
         lbBody.innerHTML = "";
         if (!entries || entries.length === 0) {
-          lbBody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#666;padding:12px">No entries yet — be the first!</td></tr>`;
+          lbBody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#666;padding:12px">No entries yet — be the first!</td></tr>`;
           return;
         }
         entries.forEach((e, i) => {
           const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}`;
           const tr = document.createElement("tr");
-          tr.innerHTML = `<td style="text-align:center">${medal}</td><td>${e.name}</td><td style="text-align:right">${Number(e.score).toFixed(1)}</td><td style="text-align:right;color:#888">${e.date}</td>`;
+          const device = e.device || "💻";
+          tr.innerHTML = `<td style="text-align:center">${medal}</td><td>${e.name}</td><td style="text-align:right">${Number(e.score).toFixed(1)}</td><td style="text-align:center">${device}</td><td style="text-align:right;color:#888">${e.date}</td>`;
           lbBody.appendChild(tr);
         });
       }
 
       async function fetchLeaderboard() {
-        lbBody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#666;padding:12px">Loading...</td></tr>`;
+        lbBody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#666;padding:12px">Loading...</td></tr>`;
         try {
-          const snap    = await scoresRef.orderByChild("score").limitToLast(10).once("value");
+          const ref  = getScoresRef();
+          if (!ref) throw new Error("Firebase not ready");
+          const snap    = await ref.orderByChild("score").limitToLast(10).once("value");
           const raw     = snap.val() || {};
           const entries = Object.values(raw).sort((a, b) => b.score - a.score);
           renderLeaderboard(entries);
         } catch(e) {
-          lbBody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#e44;padding:12px">Failed to load — check connection</td></tr>`;
+          lbBody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#e44;padding:12px">Failed to load — check connection</td></tr>`;
           console.warn("Leaderboard error:", e);
         }
       }
@@ -2362,18 +2368,17 @@
         const date  = new Date().toLocaleDateString();
         try { localStorage.setItem("truckSim_name", name); } catch(e) {}
         try {
-          // Fetch all entries, add new one, keep top 10
-          const snap    = await scoresRef.once("value");
+          const ref = getScoresRef();
+          if (!ref) throw new Error("Firebase not ready");
+          const snap    = await ref.once("value");
           const raw     = snap.val() || {};
-          let entries   = Object.entries(raw); // [[key, entry], ...]
-          entries.push([null, { name, score, date }]);
+          let entries   = Object.entries(raw);
+          entries.push([null, { name, score, date, device: isTouchDevice ? "📱" : "💻" }]);
           entries.sort((a, b) => b[1].score - a[1].score);
-          // Remove entries beyond top 10
           const toDelete = entries.slice(10);
-          toDelete.forEach(([key]) => { if (key) scoresRef.child(key).remove(); });
-          // Push new entry if it makes top 10
+          toDelete.forEach(([key]) => { if (key) ref.child(key).remove(); });
           if (entries.findIndex(([, e]) => e.name === name && e.score === score) < 10) {
-            await scoresRef.push({ name, score, date });
+            await ref.push({ name, score, date, device: isTouchDevice ? "📱" : "💻" });
           }
           fetchLeaderboard();
         } catch(e) {
