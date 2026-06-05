@@ -495,9 +495,11 @@
         maxSpeed: 65,
       };
 
-      // Tandem slide positions (kingpin → rear axle distance)
-      const TANDEM_BACK    = trailer.length - trailer.kingpinToFront; // Highway (default — axles at rear)
-      const TANDEM_FORWARD = TANDEM_BACK - 60;                        // City (axles slid forward ~10ft)
+      // Tandem slide positions (kingpin → rear axle centre distance in px)
+      // Real 53ft trailer: highway = 40ft from kingpin = 240px, axles ~9ft from rear
+      // City = slide forward ~6ft = 36px shorter = 204px from kingpin
+      const TANDEM_BACK    = 240;  // highway — 40ft from kingpin (~9ft from rear)
+      const TANDEM_FORWARD = 204;  // city — slid forward ~6ft
 
       /* =====================================
          STATE
@@ -736,9 +738,13 @@
         if (state.tandemMode === "highway") {
           state.tandemMode = "city";
           state.axleOffset = TANDEM_FORWARD;
+          showPopup("🚛 City Mode", "Tandems slid forward", "score-good", 1500);
+          playTandemClick();
         } else {
           state.tandemMode = "highway";
           state.axleOffset = TANDEM_BACK;
+          showPopup("🚛 Highway Mode", "Tandems slid back", "score-good", 1500);
+          playTandemClick();
         }
       }
 
@@ -1572,7 +1578,8 @@
         const dualGap = 2;
 
         // --- Tandem axles drawn FIRST so body covers inner tires ---
-        const slideOffset = state.tandemMode === "city" ? 60 : 0;
+        // Highway: axles 9ft (54px) from rear. City: slid forward 6ft (36px)
+        const slideOffset = state.tandemMode === "city" ? 36 : 0;
         const axleCentreX = -hl + 54 + slideOffset;
         const axleSpread  = 12;
 
@@ -1636,24 +1643,37 @@
         ctx.translate(state.x, state.y);
         ctx.rotate(state.heading);
 
-        const rear      = -truck.hitchToRear;
-        const front     = truck.length - truck.hitchToRear;
-        const hw        = truck.width / 2;
+        const rear  = -truck.hitchToRear;
+        const front = truck.length - truck.hitchToRear;
+        const hw    = truck.width / 2;
 
-        // --- Fifth wheel plate (sits at rear, under trailer) ---
+        const tireW = 14, tireH = 3;
+        const frontAxleX = -truck.hitchToRear + truck.wheelbase;
+        const cabRear  = rear + 12;
+        const cabFront = front;
+
+        // --- Fifth wheel plate ---
         ctx.fillStyle = "#555";
         ctx.beginPath();
         ctx.ellipse(rear + 6, 0, 12, 10, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // --- Fuel tanks (slim rectangles on each side, inside cab) ---
+        // --- Fuel tanks ---
         ctx.fillStyle = "#777";
-        ctx.fillRect(rear + 14, -hw + 1, 12, 6);
-        ctx.fillRect(rear + 14,  hw - 7, 12, 6);
+        ctx.fillRect(rear + 14, -hw + 1, 14, 5);
+        ctx.fillRect(rear + 14,  hw - 6, 14, 5);
+
+        // --- Steer axle bar drawn BEFORE cab ---
+        ctx.fillStyle = "#333";
+        ctx.fillRect(frontAxleX - 2, -hw, 4, hw * 2);
+
+        // --- Roof fairing (aerodynamic curved top — slightly wider than cab) ---
+        ctx.fillStyle = "#1260a0";
+        ctx.beginPath();
+        ctx.ellipse(cabRear + 18, 0, 22, hw + 3, 0, 0, Math.PI * 2);
+        ctx.fill();
 
         // --- Main cab body ---
-        const cabRear  = rear + 12;
-        const cabFront = front;
         const r = 7;
         ctx.fillStyle = "#1a8fd1";
         ctx.beginPath();
@@ -1666,91 +1686,106 @@
         ctx.closePath();
         ctx.fill();
 
-        // Cab highlight stripe
-        ctx.fillStyle = "#2aa8f5";
-        ctx.fillRect(cabRear, -hw + 4, (cabFront - cabRear) * 0.55, hw * 2 - 8);
-
-        // --- Hood / engine cover (front lower section) ---
+        // Cab side panels — slight gradient effect with a darker lower stripe
         ctx.fillStyle = "#157ab5";
-        ctx.fillRect(cabRear, -hw, 20, hw * 2);
+        ctx.fillRect(cabRear, -hw, cabFront - cabRear, 8);        // top stripe
+        ctx.fillRect(cabRear,  hw - 8, cabFront - cabRear, 8);    // bottom stripe
 
-        // Hood line
+        // Highlight stripe down the middle
+        ctx.fillStyle = "#2aa8f5";
+        ctx.fillRect(cabRear + 4, -hw + 9, (cabFront - cabRear - 8) * 0.6, hw * 2 - 18);
+
+        // --- Hood ---
+        ctx.fillStyle = "#157ab5";
+        ctx.fillRect(cabRear, -hw, 22, hw * 2);
+
+        // Hood crease lines
         ctx.strokeStyle = "#0e5a8a";
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(cabRear + 20, -hw);
-        ctx.lineTo(cabRear + 20,  hw);
+        ctx.moveTo(cabRear + 22, -hw);
+        ctx.lineTo(cabRear + 22,  hw);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(cabRear + 8, -hw + 6);
+        ctx.lineTo(cabRear + 8,  hw - 6);
         ctx.stroke();
 
         // --- Windshield ---
-        const wsLeft  = cabRear + 22;
-        const wsRight = cabFront - 4;
-        ctx.fillStyle = "rgba(150, 220, 255, 0.55)";
+        const wsLeft  = cabRear + 24;
+        const wsRight = cabFront - 5;
+        ctx.fillStyle = "rgba(140, 210, 255, 0.6)";
         ctx.beginPath();
-        ctx.moveTo(wsLeft,  -hw + 5);
-        ctx.lineTo(wsRight - 2, -hw + 5);
-        ctx.lineTo(wsRight - 2,  hw - 5);
-        ctx.lineTo(wsLeft,       hw - 5);
+        ctx.moveTo(wsLeft,  -hw + 6);
+        ctx.lineTo(wsRight - 3, -hw + 5);
+        ctx.lineTo(wsRight - 3,  hw - 5);
+        ctx.lineTo(wsLeft,       hw - 6);
         ctx.closePath();
         ctx.fill();
-
-        // Windshield frame
-        ctx.strokeStyle = "#0e5a8a";
+        ctx.strokeStyle = "#0a4870";
         ctx.lineWidth = 2;
         ctx.stroke();
 
         // Center divider
         ctx.beginPath();
-        ctx.moveTo((wsLeft + wsRight) / 2, -hw + 5);
-        ctx.lineTo((wsLeft + wsRight) / 2,  hw - 5);
-        ctx.strokeStyle = "#0e5a8a";
-        ctx.lineWidth = 1;
+        ctx.moveTo((wsLeft + wsRight) / 2, -hw + 6);
+        ctx.lineTo((wsLeft + wsRight) / 2,  hw - 6);
+        ctx.lineWidth = 1.5;
         ctx.stroke();
+
+        // --- Chrome grille ---
+        ctx.fillStyle = "#bbb";
+        ctx.fillRect(cabFront - 8, -hw + 6, 6, hw * 2 - 12);
+        // Grille slats
+        ctx.fillStyle = "#888";
+        for (let g = -hw + 8; g < hw - 8; g += 5) {
+          ctx.fillRect(cabFront - 8, g, 6, 2);
+        }
 
         // --- Bumper ---
         ctx.fillStyle = "#ccc";
         ctx.fillRect(cabFront - 3, -hw + 4, 5, hw * 2 - 8);
-
-        // Bumper bolts
         ctx.fillStyle = "#999";
         ctx.beginPath(); ctx.arc(cabFront - 1, -hw + 10, 2, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.arc(cabFront - 1,  hw - 10, 2, 0, Math.PI * 2); ctx.fill();
 
         // --- Headlights ---
-        ctx.fillStyle = "#ffffaa";
-        ctx.fillRect(cabFront - 2, -hw + 4, 4, 7);
-        ctx.fillRect(cabFront - 2,  hw - 11, 4, 7);
+        ctx.fillStyle = "#ffffcc";
+        ctx.fillRect(cabFront - 3, -hw + 4, 5, 8);
+        ctx.fillRect(cabFront - 3,  hw - 12, 5, 8);
+        // Headlight glow
+        ctx.fillStyle = "rgba(255,255,150,0.3)";
+        ctx.fillRect(cabFront - 5, -hw + 3, 7, 10);
+        ctx.fillRect(cabFront - 5,  hw - 13, 7, 10);
 
-        // --- Exhaust stacks (behind cab on each side) ---
-        ctx.fillStyle = "#444";
-        ctx.fillRect(cabRear + 2, -hw - 3, 4, 4);
-        ctx.fillRect(cabRear + 2,  hw - 1, 4, 4);
+        // --- Side mirrors (near front of cab by A-pillar) ---
+        ctx.fillStyle = "#0e5a8a";
+        ctx.fillRect(cabFront - 20, -hw - 6, 8, 4);   // left mirror
+        ctx.fillRect(cabFront - 20,  hw + 2, 8, 4);   // right mirror
+        // Mirror glass
+        ctx.fillStyle = "#aaddff";
+        ctx.fillRect(cabFront - 19, -hw - 5, 6, 2);
+        ctx.fillRect(cabFront - 19,  hw + 3, 6, 2);
+
+        // --- Exhaust stacks ---
+        ctx.fillStyle = "#555";
+        ctx.fillRect(cabRear + 3, -hw - 4, 5, 5);
+        ctx.fillRect(cabRear + 3,  hw - 1, 5, 5);
         ctx.fillStyle = "#222";
-        ctx.beginPath(); ctx.arc(cabRear + 4, -hw - 1, 2, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(cabRear + 4,  hw + 1, 2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cabRear + 5, -hw - 2, 2.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cabRear + 5,  hw + 1, 2.5, 0, Math.PI * 2); ctx.fill();
 
         // --- Drive axle dual tires ---
         const driveAxleX = rear + 4;
-        const tireW = 14, tireH = 3, dualGap = 2;
-        // Axle bar drawn first so tires appear on top
         ctx.fillStyle = "#333";
         ctx.fillRect(driveAxleX - 2, -hw - tireH, 4, hw * 2 + tireH * 2);
         ctx.fillStyle = "#111";
-        // Left side — outer past edge, inner at edge
-        ctx.fillRect(driveAxleX - tireW / 2, -hw - tireH, tireW, tireH); // outer
-        ctx.fillRect(driveAxleX - tireW / 2, -hw,         tireW, tireH); // inner
-        // Right side — inner at edge, outer past edge
-        ctx.fillRect(driveAxleX - tireW / 2,  hw - tireH, tireW, tireH); // inner
-        ctx.fillRect(driveAxleX - tireW / 2,  hw,         tireW, tireH); // outer
+        ctx.fillRect(driveAxleX - tireW / 2, -hw - tireH, tireW, tireH);
+        ctx.fillRect(driveAxleX - tireW / 2, -hw,         tireW, tireH);
+        ctx.fillRect(driveAxleX - tireW / 2,  hw - tireH, tireW, tireH);
+        ctx.fillRect(driveAxleX - tireW / 2,  hw,         tireW, tireH);
 
-        // --- Steer axle — axle bar is fixed, only tires rotate ---
-        const frontAxleX = -truck.hitchToRear + truck.wheelbase;
-
-        // Fixed axle bar drawn first
-        ctx.fillStyle = "#333";
-        ctx.fillRect(frontAxleX - 2, -hw - tireH, 4, hw * 2 + tireH * 2);
-
-        // Left tire — pivots at body edge, single tire (steer axle)
+        // --- Steer tires drawn LAST ---
         ctx.save();
         ctx.translate(frontAxleX, -hw);
         ctx.rotate(state.steerAngle);
@@ -1758,7 +1793,6 @@
         ctx.fillRect(-tireW / 2, -tireH, tireW, tireH);
         ctx.restore();
 
-        // Right tire — symmetric
         ctx.save();
         ctx.translate(frontAxleX, hw);
         ctx.rotate(state.steerAngle);
@@ -1969,27 +2003,36 @@
           master.gain.value = 0.4;
           master.connect(audioCtx.destination);
 
-          // --- Engine oscillator (main growl) ---
+          // --- Engine oscillator (diesel rumble) ---
+          // Use two low sawtooth waves slightly detuned for that diesel chop
           engineOsc = audioCtx.createOscillator();
           engineOsc.type = "sawtooth";
-          engineOsc.frequency.value = 60;
+          engineOsc.frequency.value = 28;  // very low idle
 
           engineOsc2 = audioCtx.createOscillator();
-          engineOsc2.type = "square";
-          engineOsc2.frequency.value = 62;
+          engineOsc2.type = "sawtooth";
+          engineOsc2.frequency.value = 30;  // slightly detuned
 
-          // Low pass filter
+          // Low pass filter — cuts high frequencies, keeps it bassy
           const engFilter = audioCtx.createBiquadFilter();
           engFilter.type = "lowpass";
-          engFilter.frequency.value = 400;
-          engFilter.Q.value = 1.5;
+          engFilter.frequency.value = 180;  // much lower cutoff = muddier/deeper
+          engFilter.Q.value = 2.0;
+
+          // Add a peaking filter for the diesel "chug" frequency
+          const engPeak = audioCtx.createBiquadFilter();
+          engPeak.type = "peaking";
+          engPeak.frequency.value = 80;
+          engPeak.gain.value = 12;
+          engPeak.Q.value = 1.0;
 
           engineGain = audioCtx.createGain();
           engineGain.gain.value = 0;
 
           engineOsc.connect(engFilter);
           engineOsc2.connect(engFilter);
-          engFilter.connect(engineGain);
+          engFilter.connect(engPeak);
+          engPeak.connect(engineGain);
           engineGain.connect(master);
 
           engineOsc.start();
@@ -2007,8 +2050,8 @@
 
           const idleFilter = audioCtx.createBiquadFilter();
           idleFilter.type = "bandpass";
-          idleFilter.frequency.value = 55;
-          idleFilter.Q.value = 0.8;
+          idleFilter.frequency.value = 35;  // very low diesel rumble
+          idleFilter.Q.value = 0.6;
 
           idleGain = audioCtx.createGain();
           idleGain.gain.value = 0;
@@ -2025,12 +2068,32 @@
       }
 
       // Unlock audio on first interaction (iOS requirement)
+      // Also plays a silent MP3 to bypass iOS silent switch
       function unlockAudio() {
         if (audioUnlocked) return;
         initAudio();
-        if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+        if (!audioCtx) return;
+
+        // Resume suspended context
+        if (audioCtx.state === "suspended") {
+          audioCtx.resume().then(() => {
+            // Play a silent buffer to fully unlock on iOS
+            const buf = audioCtx.createBuffer(1, 1, 22050);
+            const src = audioCtx.createBufferSource();
+            src.buffer = buf;
+            src.connect(audioCtx.destination);
+            src.start(0);
+          });
+        }
+
+        // iOS silent switch bypass — use an HTML audio element set to media category
+        try {
+          const silentAudio = new Audio("data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjMyLjEwNAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAADhgCenp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6e//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjU0AAAAAAAAAAAAAAAAJAAAAAAAAAAAAASGDgAAAAAAAAAAAAAAAAAAAP/7kGQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP/7kGQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=");
+          silentAudio.play().catch(() => {});
+        } catch(e) {}
       }
-      document.addEventListener("touchstart", unlockAudio, { once: true });
+
+      document.addEventListener("touchstart", unlockAudio, { once: false });
       document.addEventListener("mousedown",  unlockAudio, { once: true });
       document.addEventListener("keydown",    unlockAudio, { once: true });
 
@@ -2038,27 +2101,29 @@
       function updateEngineSound(speed, isReverse) {
         if (!audioCtx || !audioUnlocked) return;
         if (audioCtx.state === "suspended") audioCtx.resume();
+        if (audioCtx.state !== "running") return;
 
         const absSpeed   = Math.abs(speed);
         const t          = audioCtx.currentTime;
         const throttling = keys.ArrowUp || keys.ArrowDown;
 
-        // Freq: idle ~55Hz, rises to ~140Hz at full speed
-        const baseFreq   = isReverse ? 50 : 60;
-        const targetFreq = baseFreq + (absSpeed / limits.maxSpeed) * 80;
-        const freqConst  = throttling ? 0.1 : 0.04;
+        // Diesel freq range: idle ~28Hz, full throttle ~55Hz — stays low and rumbly
+        // Real diesel engines have a narrow RPM range compared to gas engines
+        const baseFreq   = isReverse ? 26 : 28;
+        const targetFreq = baseFreq + (absSpeed / limits.maxSpeed) * 28;
+        const freqConst  = throttling ? 0.2 : 0.08; // slower freq change = more inertia feel
         engineOsc.frequency.setTargetAtTime(targetFreq, t, freqConst);
-        engineOsc2.frequency.setTargetAtTime(targetFreq * 1.03, t, freqConst);
+        engineOsc2.frequency.setTargetAtTime(targetFreq * 1.04, t, freqConst);
 
-        // Volume: drops fast on throttle release, builds when throttling
-        const targetVol = absSpeed < 0.5 ? 0.05
-                        : throttling     ? 0.35 + (absSpeed / limits.maxSpeed) * 0.3
-                        :                  0.05 + (absSpeed / limits.maxSpeed) * 0.08;
-        const timeConst = throttling ? 0.15 : 0.05;
+        // Volume: louder under load, quiet on coast
+        const targetVol = absSpeed < 0.5 ? 0.08
+                        : throttling     ? 0.5 + (absSpeed / limits.maxSpeed) * 0.25
+                        :                  0.08 + (absSpeed / limits.maxSpeed) * 0.1;
+        const timeConst = throttling ? 0.2 : 0.06;
         engineGain.gain.setTargetAtTime(targetVol, t, timeConst);
 
-        // Idle rumble
-        idleGain.gain.setTargetAtTime(0.12, t, 0.3);
+        // Idle rumble — stronger presence
+        idleGain.gain.setTargetAtTime(0.18, t, 0.3);
       }
 
       // Air brake hiss
@@ -2066,20 +2131,24 @@
         if (!audioCtx || !audioUnlocked) return;
         try {
           const t = audioCtx.currentTime;
-          const bufSize = Math.floor(audioCtx.sampleRate * 0.4);
+          const bufSize = Math.floor(audioCtx.sampleRate * 0.6);
           const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
           const d = buf.getChannelData(0);
           for (let i = 0; i < bufSize; i++) d[i] = Math.random() * 2 - 1;
           const src = audioCtx.createBufferSource();
           src.buffer = buf;
+          // Bandpass instead of highpass — more air/hiss, less snap
           const filt = audioCtx.createBiquadFilter();
-          filt.type = "highpass";
-          filt.frequency.value = 2000;
+          filt.type = "bandpass";
+          filt.frequency.value = 900;
+          filt.Q.value = 0.5;
           const g = audioCtx.createGain();
-          g.gain.setValueAtTime(0.3, t);
-          g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+          // Smooth fade in then decay — no snap
+          g.gain.setValueAtTime(0, t);
+          g.gain.linearRampToValueAtTime(0.35, t + 0.06);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
           src.connect(filt); filt.connect(g); g.connect(audioCtx.destination);
-          src.start(t); src.stop(t + 0.4);
+          src.start(t); src.stop(t + 0.65);
         } catch(e) {}
       }
 
@@ -2248,6 +2317,27 @@
         } catch(e) {}
       }
 
+      function playTandemClick() {
+        if (!audioCtx || !audioUnlocked) return;
+        try {
+          const t = audioCtx.currentTime;
+          // Two quick metallic clunks
+          for (let i = 0; i < 2; i++) {
+            const osc = audioCtx.createOscillator();
+            osc.type = "square";
+            osc.frequency.setValueAtTime(180, t + i * 0.08);
+            osc.frequency.exponentialRampToValueAtTime(60, t + i * 0.08 + 0.06);
+            const g = audioCtx.createGain();
+            g.gain.setValueAtTime(0, t + i * 0.08);
+            g.gain.linearRampToValueAtTime(0.3, t + i * 0.08 + 0.01);
+            g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.08 + 0.1);
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.start(t + i * 0.08);
+            osc.stop(t + i * 0.08 + 0.12);
+          }
+        } catch(e) {}
+      }
+
       function resetSounds() {
         _soundCollision    = false;
         _soundJackknife    = false;
@@ -2271,13 +2361,6 @@
 
         update(dt);
         updateSounds();
-
-        // On mobile skip every other render frame (targets 30fps visually)
-        // Physics still run every frame for accuracy
-        if (isTouchDevice) {
-          frameSkip = (frameSkip + 1) % 2;
-          if (frameSkip !== 0) return;
-        }
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
