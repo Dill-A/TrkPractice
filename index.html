@@ -1024,9 +1024,9 @@
         const isDesktop = !isTouchDevice;
 
         // Desktop gets slightly slower steering and acceleration, faster braking
-        const steerRate  = isDesktop ? 0.022 : 0.03;
-        const accelRate  = isDesktop ? limits.accel * 0.75 : limits.accel;
-        const brakeRate  = isDesktop ? 0.78 : 0.85;
+        const steerRate  = isDesktop ? 0.022 : 0.022;
+        const accelRate  = isDesktop ? limits.accel * 0.75 : limits.accel * 0.75;
+        const brakeRate  = isDesktop ? 0.78 : 0.78;
 
         // Steering
         if (keys.ArrowLeft)  state.steerAngle -= steerRate * dtScale;
@@ -1293,34 +1293,35 @@
       /* =====================================
          DRAWING
       ===================================== */
-      function drawBackground() {
-        // Base asphalt colour — dark warm grey like worn blacktop
-        ctx.fillStyle = "#2a2a28";
-        ctx.fillRect(-5000, -5000, 10000, 10000);
 
-        // Aggregate texture — varied dot sizes and shades
-        for (let gx = -5000; gx < 5000; gx += 14) {
-          for (let gy = -5000; gy < 5000; gy += 14) {
+      // Pre-render background tile once — huge mobile performance gain
+      const BG_TILE_SIZE = 560;
+      const bgTile = document.createElement("canvas");
+      bgTile.width = bgTile.height = BG_TILE_SIZE;
+      (function buildBgTile() {
+        const btx = bgTile.getContext("2d");
+        btx.fillStyle = "#2a2a28";
+        btx.fillRect(0, 0, BG_TILE_SIZE, BG_TILE_SIZE);
+        for (let gx = 0; gx < BG_TILE_SIZE; gx += 14) {
+          for (let gy = 0; gy < BG_TILE_SIZE; gy += 14) {
             const jx  = ((gx * 7  + gy * 3)  % 11) - 5;
             const jy  = ((gx * 5  + gy * 11) % 9)  - 4;
             const rnd = ((gx * 13 + gy * 7)  % 17);
-            if (rnd < 4) {
-              // lighter aggregate chip
-              ctx.fillStyle = "rgba(255,255,255,0.055)";
-              ctx.fillRect(gx + jx, gy + jy, 2, 2);
-            } else if (rnd < 7) {
-              // darker aggregate chip
-              ctx.fillStyle = "rgba(0,0,0,0.15)";
-              ctx.fillRect(gx + jx, gy + jy, 3, 2);
-            } else if (rnd === 7) {
-              // occasional larger light chip
-              ctx.fillStyle = "rgba(255,255,255,0.03)";
-              ctx.fillRect(gx + jx, gy + jy, 4, 3);
-            }
+            if (rnd < 4)      { btx.fillStyle = "rgba(255,255,255,0.055)"; btx.fillRect(gx+jx,gy+jy,2,2); }
+            else if (rnd < 7) { btx.fillStyle = "rgba(0,0,0,0.15)";        btx.fillRect(gx+jx,gy+jy,3,2); }
+            else if (rnd ===7){ btx.fillStyle = "rgba(255,255,255,0.03)";  btx.fillRect(gx+jx,gy+jy,4,3); }
           }
         }
+      })();
+      let bgPattern = null;
 
-        // Subtle worn patches — slightly lighter rectangles scattered around
+      function drawBackground() {
+        // Use pre-rendered tile as repeating pattern
+        if (!bgPattern) bgPattern = ctx.createPattern(bgTile, "repeat");
+        ctx.fillStyle = bgPattern;
+        ctx.fillRect(-5000, -5000, 10000, 10000);
+
+        // Subtle worn patches
         ctx.fillStyle = "rgba(255,255,255,0.018)";
         for (let px = -4800; px < 5000; px += 320) {
           for (let py = -4800; py < 5000; py += 280) {
@@ -2260,13 +2261,23 @@
          MAIN LOOP
       ===================================== */
       let lastTime = performance.now();
+      let frameSkip = 0;
 
       function loop(ts = performance.now()) {
+        requestAnimationFrame(loop);
+
         const dt = Math.min(1 / 30, (ts - lastTime) / 1000);
         lastTime = ts;
 
         update(dt);
         updateSounds();
+
+        // On mobile skip every other render frame (targets 30fps visually)
+        // Physics still run every frame for accuracy
+        if (isTouchDevice) {
+          frameSkip = (frameSkip + 1) % 2;
+          if (frameSkip !== 0) return;
+        }
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -2297,8 +2308,6 @@
         drawHUD();
         drawMirror(mctxL, -1);
         drawMirror(mctxR,  1);
-
-        requestAnimationFrame(loop);
       }
 
       /* =====================================
